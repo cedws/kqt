@@ -1,0 +1,5 @@
+/bin/
+/artifacts/
+*.test
+.DS_Store
+__pycache__/

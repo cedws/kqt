@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ket-test
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: default
+  namespace: ket-test
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ket-log-fixture
+  namespace: ket-test
+  labels:
+    app: ket-fixture
+spec:
+  containers:
+    - name: fixture
+      image: busybox:1.37
+      command: ["sh", "-c", "echo ket-live-log-marker; sleep 3600"]
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: fixture-secret
+  namespace: ket-test
+stringData:
+  token: LIVE_SECRET_MUST_NOT_APPEAR
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: widgets.exploration.ket.dev
+spec:
+  group: exploration.ket.dev
+  scope: Namespaced
+  names:
+    plural: widgets
+    singular: widget
+    kind: Widget
+    shortNames: [wdg]
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                description:
+                  type: string
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ket-deployment
+  namespace: ket-test
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ket-deployment
+  template:
+    metadata:
+      labels:
+        app: ket-deployment
+    spec:
+      containers:
+        - name: fixture
+          image: busybox:1.37
+          command: ["sh", "-c", "echo ket-deployment-log-marker-$POD_NAME; sleep 3600"]
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ket-stateful-headless
+  namespace: ket-test
+spec:
+  clusterIP: None
+  selector:
+    app: ket-stateful
+  ports:
+    - port: 80
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ket-stateful
+  namespace: ket-test
+spec:
+  replicas: 2
+  serviceName: ket-stateful-headless
+  selector:
+    matchLabels:
+      app: ket-stateful
+  template:
+    metadata:
+      labels:
+        app: ket-stateful
+    spec:
+      containers:
+        - name: fixture
+          image: busybox:1.37
+          command: ["sh", "-c", "echo ket-stateful-log-marker-$POD_NAME; sleep 3600"]
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name

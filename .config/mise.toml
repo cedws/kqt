@@ -1,0 +1,6 @@
+[tools]
+go = "1.27.1"
+
+[env]
+GOTOOLCHAIN = "local"
+_.path = ["./bin"]

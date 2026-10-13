@@ -1,0 +1,578 @@
+package tui
+
+import (
+	"context"
+	"fmt"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"ket/internal/kube"
+)
+
+type Options struct {
+	Demo                             bool
+	Context, Namespace, View, Labels string
+	AllNamespaces                    bool
+	ScopeExplicit                    bool
+}
+type route struct {
+	resource                             kube.Resource
+	namespace, labels, fields, selection string
+}
+type choice struct{ name, description string }
+type session struct {
+	ctx     context.Context
+	cancel  context.CancelFunc
+	mu      sync.Mutex
+	backend kube.Backend
+	closed  bool
+}
+
+func newSession(ctx context.Context) *session {
+	child, cancel := context.WithCancel(ctx)
+	return &session{ctx: child, cancel: cancel}
+}
+func (s *session) attach(b kube.Backend) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		if b != nil {
+			b.Close()
+		}
+		return
+	}
+	s.backend = b
+}
+func (s *session) close() {
+	if s == nil {
+		return
+	}
+	s.cancel()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closed = true
+	if s.backend != nil {
+		s.backend.Close()
+		s.backend = nil
+	}
+}
+
+type connectedMsg struct {
+	generation                 uint64
+	backend                    kube.Backend
+	resources                  []kube.Resource
+	server, namespace, warning string
+	err                        error
+}
+type snapshotMsg struct {
+	generation, request uint64
+	rows                []unstructured.Unstructured
+	err                 error
+}
+type pollMsg struct{ generation, request uint64 }
+type themeHiddenMsg struct{ token uint64 }
+type logsMsg struct {
+	generation, token uint64
+	content           string
+	err               error
+}
+
+type model struct {
+	ctx                                context.Context
+	settings                           *Settings
+	options                            Options
+	loader                             *kube.Loader
+	session                            *session
+	backend                            kube.Backend
+	resources                          []kube.Resource
+	contextName, server                string
+	generation, request, logToken      uint64
+	requestCancel, logCancel           context.CancelFunc
+	busy                               bool
+	failures                           int
+	lastRefresh                        time.Time
+	dataErr, notice, discoveryWarning  string
+	route                              route
+	history                            []route
+	rows, visible                      []unstructured.Unstructured
+	selected, horizontal               int
+	filter, previousFilter, sortColumn string
+	descending, wide                   bool
+	theme, previousTheme               theme
+	layout                             string
+	views                              map[string]viewConfig
+	inspectorFormat                    string
+	themeUntil                         time.Time
+	themeTimer                         uint64
+	completion                         completionState
+	editToken                          uint64
+	editCancel                         context.CancelFunc
+	editBuffer                         *editBuffer
+	width, height                      int
+	mode, panelTitle                   string
+	input                              textinput.Model
+	choices, matches                   []choice
+	pickerIndex                        int
+	pickerKind                         string
+	panel, inspector                   viewport.Model
+	inspectedKey, inspectorContent     string
+	inspectorFocused                   bool
+	logObject                          unstructured.Unstructured
+	logContainer                       string
+	logPrevious                        bool
+}
+
+func newModel(ctx context.Context, s *Settings, o Options, l *kube.Loader) (*model, error) {
+	m := &model{ctx: ctx, settings: s, options: o, loader: l, resources: kube.Builtins(), theme: s.Themes[s.Config.Theme], layout: s.Config.Layout, width: 80, height: 24, sortColumn: "name"}
+	m.inspectorFormat = s.Config.InspectorFormat
+	m.themeUntil, m.themeTimer = time.Now().Add(10*time.Second), 1
+	m.panel = viewport.New(viewport.WithWidth(74), viewport.WithHeight(16))
+	m.panel.SoftWrap = false
+	m.inspector = viewport.New()
+	m.inspector.SoftWrap = true
+	m.input = textinput.New()
+	m.input.CharLimit = 256
+	m.input.SetWidth(74)
+	if o.Demo {
+		m.contextName = "demo"
+	} else {
+		m.contextName = o.Context
+		if m.contextName == "" {
+			m.contextName = l.Current()
+		}
+		if m.contextName != "" {
+			exists := false
+			for _, c := range l.Contexts() {
+				if c.Name == m.contextName {
+					exists = true
+				}
+			}
+			if !exists {
+				return nil, fmt.Errorf("unknown kubeconfig context %q", m.contextName)
+			}
+		}
+	}
+	saved, hasSaved := s.Config.Contexts[m.contextName]
+	if o.View == "" {
+		o.View = s.Config.View
+		if hasSaved && saved.View != "" {
+			o.View = saved.View
+		}
+		if o.View == "" {
+			o.View = "pods"
+		}
+	}
+	if !o.ScopeExplicit && o.Namespace == "" && !o.AllNamespaces {
+		if hasSaved {
+			o.Namespace, o.AllNamespaces = saved.Namespace, saved.AllNamespaces
+		} else if s.Config.LastContext == "" || s.Config.LastContext == m.contextName {
+			o.Namespace, o.AllNamespaces = s.Config.Namespace, s.Config.AllNamespaces
+		}
+	}
+	m.options = o
+	m.route.namespace, m.route.labels = o.Namespace, o.Labels
+	if o.AllNamespaces {
+		m.route.namespace = ""
+	} else if o.Demo && m.route.namespace == "" {
+		m.route.namespace = "default"
+	}
+	if r, e := kube.Resolve(m.resources, o.View); e == nil {
+		m.route.resource = r
+	}
+	m.applyLayout(s.Config.Layout)
+	m.resize()
+	return m, nil
+}
+func (m *model) Init() tea.Cmd {
+	if m.contextName == "" {
+		return m.openPicker("contexts")
+	}
+	return tea.Batch(m.connect(m.contextName), m.themeTimeout())
+}
+func (m *model) close() {
+	if m.requestCancel != nil {
+		m.requestCancel()
+	}
+	m.closeLog()
+	m.cancelEdit()
+	m.session.close()
+}
+func (m *model) connect(name string) tea.Cmd {
+	m.close()
+	m.generation++
+	m.request++
+	m.busy = true
+	m.backend = nil
+	m.resources = kube.Builtins()
+	m.rows = nil
+	m.visible = nil
+	m.history = nil
+	m.selected = 0
+	m.horizontal = 0
+	m.filter = ""
+	m.dataErr = ""
+	m.notice = ""
+	m.discoveryWarning = ""
+	m.server = ""
+	m.mode = ""
+	m.inspectorFocused = false
+	m.lastRefresh = time.Time{}
+	m.failures = 0
+	if m.contextName != name {
+		m.route.namespace = ""
+		m.options.Namespace = ""
+		m.options.AllNamespaces = false
+		m.route.labels = ""
+		m.route.fields = ""
+		if state, ok := m.settings.Config.Contexts[name]; ok {
+			m.route.namespace, m.options.AllNamespaces = state.Namespace, state.AllNamespaces
+			m.options.Namespace = state.Namespace
+			if state.View != "" {
+				m.options.View = state.View
+				m.route.resource = kube.Resource{}
+				if r, e := kube.Resolve(m.resources, state.View); e == nil {
+					m.route.resource = r
+				}
+			}
+		}
+	}
+	m.contextName = name
+	m.updateInspector()
+	m.session = newSession(m.ctx)
+	s, g, demo, loader := m.session, m.generation, m.options.Demo, m.loader
+	return func() tea.Msg {
+		var b kube.Backend
+		var server, ns string
+		var err error
+		if demo {
+			b = kube.NewDemo()
+			server = "offline sample cluster"
+			ns = "default"
+		} else {
+			b, server, ns, err = loader.Open(name)
+		}
+		s.attach(b)
+		if err != nil {
+			return connectedMsg{generation: g, err: err}
+		}
+		resources, discoveryErr := b.Resources(s.ctx)
+		warning := ""
+		if discoveryErr != nil {
+			warning = "API discovery incomplete: " + discoveryErr.Error()
+		}
+		if resources == nil {
+			resources = kube.Builtins()
+		}
+		return connectedMsg{g, b, resources, server, ns, warning, nil}
+	}
+}
+func (m *model) fetch() tea.Cmd {
+	if m.backend == nil || m.busy {
+		return nil
+	}
+	m.busy = true
+	m.request++
+	g, id, b, r := m.generation, m.request, m.backend, m.route
+	ctx, cancel := context.WithTimeout(m.session.ctx, 15*time.Second)
+	m.requestCancel = cancel
+	return func() tea.Msg {
+		defer cancel()
+		rows, err := b.List(ctx, kube.Query{Resource: r.resource, Namespace: r.namespace, Labels: r.labels, Fields: r.fields})
+		return snapshotMsg{g, id, rows, err}
+	}
+}
+func (m *model) poll() tea.Cmd {
+	g, id := m.generation, m.request
+	delay := m.settings.Interval
+	for i := 0; i < min(m.failures, 4); i++ {
+		delay *= 2
+	}
+	delay = min(delay, 30*time.Second)
+	return tea.Tick(delay, func(time.Time) tea.Msg { return pollMsg{g, id} })
+}
+func (m *model) navigate(r route, remember bool) tea.Cmd {
+	if remember {
+		old := m.route
+		if o, ok := m.current(); ok {
+			old.selection = kube.Identity(o)
+		}
+		m.history = append(m.history, old)
+	}
+	if m.requestCancel != nil {
+		m.requestCancel()
+	}
+	m.closeLog()
+	m.request++
+	m.busy = false
+	m.rows = nil
+	m.visible = nil
+	m.selected = 0
+	m.horizontal = 0
+	m.filter = ""
+	m.mode = ""
+	m.dataErr = ""
+	m.notice = ""
+	m.lastRefresh = time.Time{}
+	m.failures = 0
+	m.inspectorFocused = false
+	m.route = r
+	m.applyView()
+	m.updateInspector()
+	m.saveRoute()
+	return m.fetch()
+}
+func (m *model) applyView() {
+	m.sortColumn = "name"
+	m.descending = false
+	v, ok := m.views[m.route.resource.ID()]
+	if !ok {
+		v = m.views[m.route.resource.GVR.Resource]
+	}
+	if v.Sort != "" {
+		m.sortColumn = v.Sort
+	}
+	m.descending = v.Descending
+}
+func (m *model) columns() []string {
+	v, ok := m.views[m.route.resource.ID()]
+	if !ok {
+		v = m.views[m.route.resource.GVR.Resource]
+	}
+	cols := slices.Clone(v.Columns)
+	if len(cols) == 0 {
+		cols = kube.DefaultColumns(m.route.resource.Kind)
+	}
+	if m.wide {
+		for _, c := range []string{"kind", "labels"} {
+			if !slices.Contains(cols, c) {
+				cols = append(cols, c)
+			}
+		}
+	}
+	if m.route.namespace != "" || !m.route.resource.Namespaced {
+		cols = slices.DeleteFunc(cols, func(c string) bool { return c == "namespace" })
+	}
+	return cols
+}
+func (m *model) current() (unstructured.Unstructured, bool) {
+	if m.selected < 0 || m.selected >= len(m.visible) {
+		return unstructured.Unstructured{}, false
+	}
+	return m.visible[m.selected], true
+}
+func (m *model) rebuild(key string) {
+	slices.SortStableFunc(m.rows, func(a, b unstructured.Unstructured) int {
+		av, bv := kube.Column(a, m.sortColumn), kube.Column(b, m.sortColumn)
+		n := strings.Compare(av, bv)
+		if m.sortColumn == "age" {
+			at, bt := a.GetCreationTimestamp(), b.GetCreationTimestamp()
+			n = bt.Time.Compare(at.Time)
+		} else {
+			an, ae := strconv.ParseFloat(av, 64)
+			bn, be := strconv.ParseFloat(bv, 64)
+			if ae == nil && be == nil {
+				n = 0
+				if an < bn {
+					n = -1
+				} else if an > bn {
+					n = 1
+				}
+			}
+		}
+		if n == 0 {
+			n = strings.Compare(a.GetNamespace()+"/"+a.GetName(), b.GetNamespace()+"/"+b.GetName())
+		}
+		if m.descending {
+			return -n
+		}
+		return n
+	})
+	m.visible = nil
+	type rankedRow struct {
+		object unstructured.Unstructured
+		score  int
+	}
+	var matched []rankedRow
+	for _, o := range m.rows {
+		best, matches := 0, m.filter == ""
+		for _, c := range m.columns() {
+			if score, ok := fuzzyScore(m.filter, kube.Column(o, c)); ok {
+				matches = true
+				best = max(best, score)
+			}
+		}
+		if matches {
+			matched = append(matched, rankedRow{o, best})
+		}
+	}
+	if m.filter != "" {
+		slices.SortStableFunc(matched, func(a, b rankedRow) int { return b.score - a.score })
+	}
+	for _, row := range matched {
+		m.visible = append(m.visible, row.object)
+	}
+	m.selected = min(m.selected, max(0, len(m.visible)-1))
+	for i, o := range m.visible {
+		if kube.Identity(o) == key {
+			m.selected = i
+			break
+		}
+	}
+	m.updateInspector()
+}
+func (m *model) move(n int) {
+	m.selected = max(0, min(m.selected+n, len(m.visible)-1))
+	m.updateInspector()
+}
+func (m *model) updateInspector() {
+	o, ok := m.current()
+	content, key := "No resource selected.", ""
+	if ok {
+		key = kube.Identity(o)
+		content = m.describe(o)
+		if m.inspectorFormat == "json" {
+			content = m.theme.renderJSON(kube.Manifest(o, true))
+		}
+	}
+	if content != m.inspectorContent {
+		m.inspectorContent = content
+		m.inspector.SetContent(content)
+	}
+	if key != m.inspectedKey {
+		m.inspectedKey = key
+		m.inspector.GotoTop()
+	}
+}
+func (m *model) describe(o unstructured.Unstructured) string {
+	return fmt.Sprintf("%s  %s\nNamespace  %s\nStatus     %s\nAge        %s\n\n", kube.Safe(o.GetKind()), kube.Safe(o.GetName()), kube.Safe(o.GetNamespace()), kube.Safe(kube.Status(o)), kube.Age(o)) + m.theme.renderYAML(kube.Manifest(o, false))
+}
+func (m *model) closeLog() {
+	m.logToken++
+	if m.logCancel != nil {
+		m.logCancel()
+		m.logCancel = nil
+	}
+}
+func (m *model) loadLogs() tea.Cmd {
+	m.closeLog()
+	g, token, b, o, c, previous := m.generation, m.logToken, m.backend, m.logObject, m.logContainer, m.logPrevious
+	ctx, cancel := context.WithTimeout(m.session.ctx, 30*time.Second)
+	m.logCancel = cancel
+	m.mode = "logs"
+	m.panel.SoftWrap = true
+	m.panelTitle = "Logs · " + o.GetNamespace() + "/" + o.GetName() + ":" + c
+	if previous {
+		m.panelTitle += " · previous"
+	}
+	m.panel.SetContent("Loading logs…")
+	m.panel.GotoTop()
+	return func() tea.Msg {
+		defer cancel()
+		content, err := kube.LogSnapshot(ctx, b, o, c, previous)
+		return logsMsg{g, token, content, err}
+	}
+}
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch v := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = max(1, v.Width)
+		m.height = max(1, v.Height)
+		m.resize()
+	case connectedMsg:
+		if v.generation != m.generation {
+			return m, nil
+		}
+		m.busy = false
+		if v.err != nil {
+			m.dataErr = kube.Safe(v.err.Error())
+			return m, nil
+		}
+		m.backend = v.backend
+		m.resources = v.resources
+		m.server = v.server
+		m.discoveryWarning = kube.Safe(v.warning)
+		if m.route.namespace == "" && !m.options.AllNamespaces {
+			m.route.namespace = v.namespace
+		}
+		name := m.options.View
+		if m.route.resource.ID() != "" {
+			name = m.route.resource.ID()
+		}
+		r, err := kube.Resolve(m.resources, name)
+		if err != nil {
+			m.dataErr = kube.Safe(err.Error())
+			return m, nil
+		}
+		m.route.resource = r
+		m.applyView()
+		m.saveRoute()
+		return m, m.fetch()
+	case snapshotMsg:
+		if v.generation != m.generation || v.request != m.request {
+			return m, nil
+		}
+		m.busy = false
+		if v.err != nil {
+			m.dataErr = kube.Safe(v.err.Error())
+			m.failures++
+		} else {
+			key := m.route.selection
+			if o, ok := m.current(); ok {
+				key = kube.Identity(o)
+			}
+			m.route.selection = ""
+			m.rows = make([]unstructured.Unstructured, len(v.rows))
+			for i, o := range v.rows {
+				m.rows[i] = kube.Redacted(o)
+			}
+			m.dataErr = ""
+			m.failures = 0
+			m.lastRefresh = time.Now()
+			m.rebuild(key)
+		}
+		return m, m.poll()
+	case pollMsg:
+		if v.generation == m.generation && v.request == m.request {
+			return m, m.fetch()
+		}
+	case logsMsg:
+		if v.generation != m.generation || v.token != m.logToken || m.mode != "logs" {
+			return m, nil
+		}
+		if v.err != nil {
+			m.panel.SetContent("Unable to read logs: " + kube.Safe(v.err.Error()) + "\n\nCtrl+R retries; Esc closes.")
+		} else {
+			content := kube.SafeLines(v.content)
+			if content == "" {
+				content = "No log lines returned."
+			}
+			m.panel.SetContent(content)
+		}
+	case themeHiddenMsg:
+		if v.token == m.themeTimer {
+			m.themeUntil = time.Time{}
+		}
+	case editReadyMsg:
+		return m, m.editorReady(v)
+	case editorClosedMsg:
+		return m, m.editorClosed(v)
+	case editedMsg:
+		return m, m.editFinished(v)
+	case tea.KeyPressMsg:
+		return m, m.key(v)
+	default:
+		if m.mode == "command" || m.mode == "filter" || m.mode == "picker" {
+			var cmd tea.Cmd
+			m.input, cmd = m.input.Update(msg)
+			return m, cmd
+		}
+	}
+	return m, nil
+}

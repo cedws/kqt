@@ -1,0 +1,9 @@
+apiVersion: exploration.ket.dev/v1
+kind: Widget
+metadata:
+  name: live-widget
+  namespace: ket-test
+spec:
+  description: Real Kubernetes discovery fixture
+status:
+  phase: Ready
