@@ -2,6 +2,7 @@ package tui
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/viewport"
@@ -57,6 +58,9 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		m.close()
 		return tea.Quit
 	}
+	if m.mode == "log-search" || m.mode == "log-save" {
+		return m.logsInputKey(msg)
+	}
 	if m.mode == "command" || m.mode == "filter" {
 		if m.mode == "command" && (k == "tab" || k == "shift+tab") {
 			m.completeCommand(k == "shift+tab")
@@ -104,10 +108,32 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 	if m.mode != "" {
 		if k == "esc" || k == "q" {
 			m.closeLog()
+			m.closeEvents()
 			m.mode = ""
 			return nil
 		}
 		if m.mode == "logs" {
+			switch k {
+			case "/":
+				return m.logsInput("log-search")
+			case "o":
+				return m.logsInput("log-save")
+			case "f":
+				m.logFollow = !m.logFollow
+				m.logPrevious = false
+				return m.loadLogs()
+			case "space", " ":
+				m.logPaused = !m.logPaused
+				m.logTitle()
+				if !m.logPaused {
+					m.renderLogs()
+				}
+				return nil
+			case "G", "end":
+				m.logTail = true
+			case "k", "up", "g", "home", "ctrl+u", "pgup", "ctrl+b":
+				m.logTail = false
+			}
 			if k == "w" {
 				m.panel.SoftWrap = !m.panel.SoftWrap
 				return nil
@@ -122,6 +148,14 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 			if k == "c" {
 				return m.openPicker("containers")
 			}
+		}
+		if m.mode == "events" && k == "ctrl+r" {
+			return m.loadEvents()
+		}
+		if m.mode == "forward-details" && k == "x" {
+			m.stopForward(m.forwardDetail)
+			m.showForward(m.forwardDetail)
+			return nil
 		}
 		if m.mode == "details" {
 			switch k {
@@ -209,6 +243,14 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		return m.openLogs(false)
 	case "P":
 		return m.openLogs(true)
+	case "E":
+		return m.openEvents()
+	case "m":
+		return m.toggleMetrics()
+	case "f":
+		return m.promptForward()
+	case "F":
+		return m.openPicker("forwards")
 	case "n":
 		return m.changeResource("namespaces", true)
 	case "c":
@@ -226,6 +268,8 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 	case "w":
 		m.wide = !m.wide
 	case "s":
+		return m.openShell()
+	case "S":
 		m.descending = !m.descending
 		key := ""
 		if o, ok := m.current(); ok {
@@ -321,6 +365,7 @@ func (m *model) openLogs(previous bool) tea.Cmd {
 	}
 	m.logObject = o
 	m.logPrevious = previous
+	_, m.logFollow = m.backend.(kube.LogStreamer)
 	containers := kube.Containers(o)
 	if len(containers) == 0 {
 		m.notice = "Resource has no containers."
@@ -457,6 +502,30 @@ func (m *model) command(value string) tea.Cmd {
 		return m.navigate(r, false)
 	case "logs":
 		return m.openLogs(arg == "previous")
+	case "events":
+		if arg == "selected" {
+			return m.openEvents()
+		}
+		return m.changeResource("events", true)
+	case "metrics":
+		if arg == "on" {
+			m.metricsEnabled = false
+		} else if arg == "off" {
+			m.metricsEnabled = true
+		} else if arg != "" {
+			m.notice = "Use :metrics on or off"
+			return nil
+		}
+		return m.toggleMetrics()
+	case "shell":
+		return m.openShell()
+	case "forward":
+		if arg == "" {
+			return m.promptForward()
+		}
+		return m.forwardCommand(arg)
+	case "forwards":
+		return m.openPicker("forwards")
 	case "edit":
 		return m.openEditor()
 	case "refresh":
@@ -475,12 +544,22 @@ func (m *model) command(value string) tea.Cmd {
 	return nil
 }
 func (m *model) openPicker(kind string) tea.Cmd {
+	m.pickerReturn = ""
+	if kind == "containers" && m.mode == "logs" {
+		m.pickerReturn = "logs"
+	}
 	m.previousTheme = m.theme
 	m.pickerKind = kind
 	m.mode = "picker"
 	m.choices = nil
 	m.pickerIndex = 0
 	switch kind {
+	case "forwards":
+		m.refreshForwardChoices()
+	case "shell-containers":
+		for _, c := range kube.RunningContainers(m.shellObject) {
+			m.choices = append(m.choices, choice{c, "running pod container"})
+		}
 	case "themes":
 		for _, name := range themeNames(m.settings.Themes) {
 			m.choices = append(m.choices, choice{name, "terminal palette"})
@@ -556,7 +635,7 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 		if m.pickerKind == "themes" {
 			m.setTheme(m.previousTheme)
 		}
-		m.mode = ""
+		m.mode = m.pickerReturn
 		m.input.Blur()
 		return nil
 	case "up", "ctrl+k":
@@ -567,6 +646,17 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.pickerIndex = max(0, m.pickerIndex-8)
 	case "pgdown":
 		m.pickerIndex = min(max(0, len(m.matches)-1), m.pickerIndex+8)
+	case "x":
+		if m.pickerKind == "forwards" && len(m.matches) > 0 {
+			id, _ := strconv.ParseUint(m.matches[m.pickerIndex].name, 10, 64)
+			m.stopForward(id)
+			m.refreshForwardChoices()
+			return nil
+		}
+		var cmd tea.Cmd
+		m.input, cmd = m.input.Update(msg)
+		m.filterChoices()
+		return cmd
 	case "enter":
 		if len(m.matches) == 0 {
 			return nil
@@ -575,6 +665,13 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.mode = ""
 		m.input.Blur()
 		switch m.pickerKind {
+		case "shell-containers":
+			m.shellContainer = c.name
+			return m.runShell()
+		case "forwards":
+			id, _ := strconv.ParseUint(c.name, 10, 64)
+			m.showForward(id)
+			return nil
 		case "themes":
 			return m.selectTheme(m.settings.Themes[c.name])
 		case "layouts":
@@ -629,6 +726,11 @@ Explore
   Inspector: J / y   Switch focused inspector to JSON / YAML
   Details: J / y     Switch open manifest panel to JSON / YAML
   L / P              Logs / previous logs: pod, deployment, statefulset
+  E                  Events and conditions for the selected resource
+  m / :metrics       Toggle pod/node CPU and memory columns
+  s / :shell         Shell in a running pod/container; Ctrl+] disconnects
+  f                  Forward a pod/service port (LOCAL:REMOTE; LOCAL 0 auto)
+  F / :forwards      Manage forwards; x stops the selected forward
   Logs: c / p / w    Select container / previous instance / wrap; Ctrl+R reloads
   e / :edit          Edit fresh resource in configured editor or $EDITOR
 
@@ -639,7 +741,7 @@ Appearance and saved settings
   :write NAME        Save current arrangement and columns as a layout
   i                  Cycle right / bottom / classic inspector layouts
   :inspector json    Also accepts yaml, right, bottom, none
-  w / s              Wide fields / reverse sort; :sort age chooses field
+  w / S              Wide fields / reverse sort; :sort age chooses field
   :columns name,status,age   Configure columns for the active layout
   /spec/replicas     JSON Pointer column (also supported in config)
   Pickers            Type to search; arrows / Ctrl+J/K move; Enter selects
@@ -655,6 +757,11 @@ The theme name is shown for ten seconds after selection.
 Kubeconfig is never modified. Secret values are redacted in UI views.
 Editing reads a fresh full object, applies a versioned patch on saved changes,
 and retains the private file on errors/conflicts. Unchanged edits do not write.
-Pod logs: last 500 lines / 1 MiB per source; aggregate output at most 4 MiB.
-Tables refresh every 2s by default; logs are snapshots (Ctrl+R reloads).
+Live logs: Space pauses, / searches, o saves, f switches live/snapshot.
+Snapshots: last 500 lines / 1 MiB per source; aggregate at most 4 MiB.
+Live logs retain 4 MiB / 10,000 lines and follow at most 64 containers.
+Metrics require the cluster Metrics API. cpu%/memory% compare pod limits
+or node allocatable capacity; missing limits/samples display a dash.
+Tables refresh every 2s. Forwarding binds 127.0.0.1 and ends on context
+switch or quit. :forward stop ID / all stops a forward without opening it.
 `

@@ -1,0 +1,220 @@
+package tui
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"strings"
+	"sync"
+
+	tea "charm.land/bubbletea/v2"
+	"ket/internal/kube"
+)
+
+const logBufferBytes = 4 * 1024 * 1024
+const logBufferLines = 10000
+
+// A bounded queue decouples network readers from terminal rendering. It also
+// prevents slow/paused viewports from leaving requests blocked on UI messages.
+type logFeed struct {
+	sync.Mutex
+	lines         []string
+	size, dropped int
+	done          bool
+	err           error
+	notify        chan struct{}
+}
+
+func newLogFeed() *logFeed { return &logFeed{notify: make(chan struct{}, 1)} }
+func (f *logFeed) signal() {
+	select {
+	case f.notify <- struct{}{}:
+	default:
+	}
+}
+func (f *logFeed) append(line string) {
+	f.Lock()
+	if len(line) > 1024*1024 {
+		line = line[:1024*1024] + " … line truncated"
+	}
+	f.lines = append(f.lines, line)
+	f.size += len(line) + 1
+	for len(f.lines) > logBufferLines || f.size > logBufferBytes {
+		f.size -= len(f.lines[0]) + 1
+		f.lines[0] = ""
+		f.lines = f.lines[1:]
+		f.dropped++
+	}
+	f.Unlock()
+	f.signal()
+}
+func (f *logFeed) finish(err error) { f.Lock(); f.done, f.err = true, err; f.Unlock(); f.signal() }
+func (f *logFeed) drain() ([]string, int, bool, error) {
+	f.Lock()
+	defer f.Unlock()
+	lines, dropped := f.lines, f.dropped
+	f.lines = nil
+	f.size, f.dropped = 0, 0
+	return lines, dropped, f.done, f.err
+}
+
+type logPulseMsg struct {
+	generation, token uint64
+	feed              *logFeed
+}
+
+func waitLog(ctx context.Context, g, token uint64, feed *logFeed) tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-feed.notify:
+			return logPulseMsg{g, token, feed}
+		}
+	}
+}
+func (m *model) followLogs() tea.Cmd {
+	m.closeLog()
+	ctx, cancel := context.WithCancel(m.session.ctx)
+	m.logCancel = cancel
+	m.logFeed = newLogFeed()
+	m.logLines = nil
+	m.logSize, m.logDropped = 0, 0
+	m.logPaused = false
+	m.logTail = true
+	m.logSearch = ""
+	m.logDone = false
+	m.mode = "logs"
+	m.panel.SoftWrap = true
+	m.panel.SetContent("Waiting for log lines…")
+	m.panel.GotoTop()
+	m.logTitle()
+	feed, b, target, container, g, token := m.logFeed, m.backend, m.logObject, m.logContainer, m.generation, m.logToken
+	go func() { err := kube.FollowWorkload(ctx, b, target, container, feed.append); feed.finish(err) }()
+	return waitLog(ctx, g, token, feed)
+}
+func (m *model) logTitle() {
+	m.panelTitle = "Logs · " + m.logObject.GetNamespace() + "/" + m.logObject.GetName() + ":" + m.logContainer
+	if m.logPrevious {
+		m.panelTitle += " · previous"
+	} else if m.logFollow {
+		if m.logDone {
+			m.panelTitle += " · ended"
+		} else {
+			m.panelTitle += " · live"
+		}
+	} else {
+		m.panelTitle += " · snapshot"
+	}
+	if m.logPaused {
+		m.panelTitle += " · paused"
+	}
+	if m.logSearch != "" {
+		m.panelTitle += " · /" + kube.Safe(m.logSearch)
+	}
+}
+func (m *model) logContent() string {
+	var lines []string
+	if m.logDropped > 0 {
+		lines = append(lines, fmt.Sprintf("[ket] %d older lines discarded (4 MiB / 10,000 line buffer)", m.logDropped))
+	}
+	for _, line := range m.logLines {
+		if strings.Contains(strings.ToLower(line), strings.ToLower(m.logSearch)) {
+			lines = append(lines, line)
+		}
+	}
+	if len(lines) == 0 {
+		return "No log lines match. Waiting for new output…"
+	}
+	return strings.Join(lines, "\n")
+}
+func (m *model) renderLogs() {
+	m.logTitle()
+	offset := m.panel.YOffset()
+	m.panel.SetContent(m.logContent())
+	if m.logTail {
+		m.panel.GotoBottom()
+	} else {
+		m.panel.SetYOffset(offset)
+	}
+}
+func (m *model) logPulse(v logPulseMsg) tea.Cmd {
+	if v.generation != m.generation || v.token != m.logToken || v.feed != m.logFeed {
+		return nil
+	}
+	lines, dropped, done, err := v.feed.drain()
+	m.logDropped += dropped
+	for _, line := range lines {
+		m.logLines = append(m.logLines, line)
+		m.logSize += len(line) + 1
+	}
+	for len(m.logLines) > logBufferLines || m.logSize > logBufferBytes {
+		m.logSize -= len(m.logLines[0]) + 1
+		m.logLines[0] = ""
+		m.logLines = m.logLines[1:]
+		m.logDropped++
+	}
+	m.logDone = done
+	if err != nil && m.session.ctx.Err() == nil {
+		m.logLines = append(m.logLines, "[ket] Live logs ended: "+kube.Safe(err.Error()))
+	}
+	if !m.logPaused {
+		m.renderLogs()
+	} else {
+		m.logTitle()
+	}
+	if done {
+		return nil
+	}
+	return waitLog(m.session.ctx, v.generation, v.token, v.feed)
+}
+func (m *model) logsInput(mode string) tea.Cmd {
+	m.mode = mode
+	m.input.Prompt = "/ "
+	value := m.logSearch
+	if mode == "log-save" {
+		value = "ket-logs.log"
+		m.input.Prompt = "Save to: "
+	}
+	m.input.SetValue(value)
+	m.input.CursorEnd()
+	return m.input.Focus()
+}
+func (m *model) logsInputKey(msg tea.KeyPressMsg) tea.Cmd {
+	if msg.String() == "esc" {
+		m.mode = "logs"
+		m.input.Blur()
+		return nil
+	}
+	if msg.String() == "enter" {
+		mode, value := m.mode, m.input.Value()
+		m.mode = "logs"
+		m.input.Blur()
+		if mode == "log-search" {
+			m.logSearch = value
+			m.renderLogs()
+			return nil
+		}
+		content := m.logContent() + "\n"
+		// Save exactly what is displayed, privately, without replacing existing files.
+		return func() tea.Msg {
+			file, err := os.OpenFile(value, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+			if err == nil {
+				_, err = file.WriteString(content)
+				closeErr := file.Close()
+				if err == nil {
+					err = closeErr
+				}
+			}
+			return logSavedMsg{path: value, err: err}
+		}
+	}
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	return cmd
+}
+
+type logSavedMsg struct {
+	path string
+	err  error
+}

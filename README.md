@@ -65,12 +65,18 @@ picker opens. UI preferences never silently select a different Kubernetes contex
 | `Enter` | Workload/service/node → pods; otherwise describe |
 | `d`, `y` / `v`, `J` | Describe, highlighted YAML, highlighted JSON |
 | `Tab`, then `J` / `y` | Focus inspector, then switch it to JSON / YAML |
-| `L`, `P` | Logs / previous logs from a pod, deployment, or statefulset |
+| `L`, `P` | Live logs / previous log snapshots from a pod, deployment, or statefulset |
+| `Space`, `/`, `f`, `o` in logs | Pause, search, switch live/snapshot, save displayed logs |
+| `E`, `:events selected` | Events and conditions for the selected resource |
+| `m`, `:metrics on` / `off` | Toggle pod/node CPU and memory columns |
+| `s`, `:shell` | Open a shell in a running pod/container |
+| `f`, `:forward LOCAL:REMOTE` | Forward a pod/service port to localhost |
+| `F`, `:forwards` | View/manage forwards; `x` stops the selected forward |
 | `e`, `:edit` | Open the selected resource in your editor |
 | `t`, `:themes` | Fuzzy theme picker with reversible previews |
 | `:layouts`, `:layout NAME` | Choose a saved layout |
 | `:write NAME` | Save current arrangement, columns, sort, and wide state |
-| `i`, `w`, `s` | Cycle inspector positions, wide fields, reverse sort |
+| `i`, `w`, `S` | Cycle inspector positions, wide fields, reverse sort |
 | `Ctrl+R`, `Escape`, `?`, `q` | Refresh, back/close, help, quit |
 
 Completion covers commands, resource names and aliases, theme/layout names,
@@ -106,10 +112,67 @@ all pods matching its selector in its namespace. Multi-container resources offer
 a container picker, including an all-containers option. Within logs, `c` selects
 a container, `p` toggles previous logs, and `Ctrl+R` reloads.
 
-Logs are bounded snapshots, not a continuous stream: up to 500 lines / 1 MiB per
-source and 4 MiB combined. Workload output identifies each pod/container, reads
-at most four sources concurrently, and shows individual source errors alongside
-successful logs. Truncation is labelled. Logs wrap by default; `w` toggles wrapping, and `h/l` scrolls unwrapped lines.
+Logs follow live by default. Workloads attach to new matching pods and stop
+following removed pods; discovery reconciles every two seconds. Output from
+multiple sources identifies each pod/container. A selected individual pod stays
+bound to its UID; a replacement requires closing logs and selecting it again.
+Streams reconnect using timestamps to avoid replaying already displayed lines.
+
+`Space` pauses the display while collection continues in a bounded buffer. `/`
+filters lines by text, ignoring case; `G` returns to following the bottom after
+scrolling up. `o` saves the displayed, filtered buffer to a private file, refusing
+to overwrite an existing file. Logs wrap by default; `w` toggles wrapping, and
+`h/l` scrolls unwrapped lines.
+
+`f` switches between live logs and snapshots. Previous logs (`P` / `p`) are
+snapshots. Snapshots read up to 500 lines / 1 MiB per source, at most four sources
+concurrently, and 4 MiB combined. Live collection starts with the last 200 lines
+per source, retains at most 4 MiB / 10,000 lines, and follows at most 64 containers.
+Discarded/truncated output and individual source errors are labelled. Closing
+logs, switching contexts, and quitting cancel the streams.
+
+## Events and metrics
+
+`E` shows conditions and events for the selected resource, matched by immutable
+UID and sorted newest first. `Ctrl+R` reloads the fresh resource and its events.
+`:events` still opens the general events table; `:events selected` opens the
+resource-specific panel. Events may have expired from Kubernetes retention.
+
+`m` adds CPU and memory usage to pod/node tables. The cluster must provide the
+[Metrics API](https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/),
+normally through Metrics Server. Missing permissions, unavailable APIs, and
+pending samples are reported without disrupting resource browsing. Usage sorts
+numerically and is kept separate from the original YAML/JSON manifests.
+
+Custom columns also accept `cpu`, `memory`, `cpu%`, and `memory%`. Percentages
+compare pod usage against summed application-container limits, or node usage
+against allocatable capacity. If any application container lacks the relevant
+limit, the pod percentage is unavailable. Missing samples/limits display `—`.
+
+## Shells and port forwarding
+
+`s` opens `/bin/sh` in the selected running pod, offering a picker when several
+containers are running. Configure another command with `shell: "/bin/bash"` in
+the settings file. Arguments support quoting and run directly inside the chosen
+container. Missing shells and Kubernetes permission denials are displayed.
+
+The shell takes over the native terminal, including resize delivery, then returns
+to ket on exit. `Ctrl+C` goes to the remote process; `Ctrl+]` disconnects locally.
+ket verifies the pod UID immediately before opening the connection. Kubernetes's
+exec endpoint addresses a pod by name, so that check is not an atomic UID
+precondition. Shells use native client-go; kubectl is not required.
+
+`f` prepares a forwarding command from the pod/service's declared TCP port, or
+enter `:forward 8080:80` directly. A local port of `0` chooses a free port. Service
+ports resolve named target ports against a ready matching pod; the actual pod and
+local address are shown when ready. The selected pod stays fixed for that forward.
+
+`F` / `:forwards` lists active and recently completed forwards. Select one to
+inspect its destination and status; `x` stops it. `:forward stop ID` and
+`:forward stop all` also work. Listeners bind only to `127.0.0.1`. Up to 16 forwards
+can run concurrently; namespace changes retain them, context changes and quitting
+close them. Forwarding uses native client-go. Shells and forwards try WebSocket
+transport with SPDY fallback for compatible upgrade/proxy failures.
 
 ## Editing
 
@@ -186,7 +249,7 @@ columns, sorting, and wide mode. `:layouts` searches all built-in and saved name
 right inspector; full-screen details stay available.
 
 `:columns name,status,age` saves columns for the active layout. `:sort age` and
-`s` change sorting; `:write NAME` includes that sort in the saved profile.
+`S` change sorting; `:write NAME` includes that sort in the saved profile.
 JSON Pointer columns such as `/spec/replicas` and
 `/metadata/labels/app.kubernetes.io~1name` are supported. Numeric fields sort
 numerically; age uses creation time.
@@ -232,7 +295,7 @@ inheritance, completion, fuzzy matching, syntax highlighting, theme timing,
 inspector focus, terminal dimensions, and log aggregation. PTY checks cover
 editor terminal handoff/restoration and saved-state restart as well.
 
-Pod shells, port forwarding, metrics, continuous log following, and informer
-watches are not implemented. Resource refresh uses polling.
+Resource relationships beyond workload/service/node-to-pods, dedicated workload
+actions, and informer watches remain future work. Resource refresh uses polling.
 See [the design](docs/design.md), [verification](docs/verification.md), and
 [the pod-shell assessment](docs/pod-shell-assessment.md).

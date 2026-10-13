@@ -1,8 +1,9 @@
 # Pod shell assessment
 
-Investigated after completing the requested feature work, on 2026-10-12.
-Shell support is feasible as a small, isolated operator feature. It has not been
-implemented or qualified in ket yet.
+Investigated on 2026-10-12. The native client-go approach was implemented and
+qualified on 2026-10-13. `s` now opens a selected running container's shell, and
+`S` reverses sorting. See [verification](verification.md) for tested behavior
+and remaining qualification limits.
 
 ## What k9s actually does
 
@@ -39,14 +40,13 @@ The pinned local v0.36.0 source includes these APIs. ket already uses Bubble Tea
 external-I/O terminal lifecycle for editing, and x/term already provides raw-mode,
 restoration, and terminal dimensions. An embedded terminal is unnecessary.
 
-## Recommendation
+## Selected implementation
 
-Use **client-go remotecommand with a native terminal handoff** for the lasting
-implementation. That preserves ket's existing no-kubectl runtime requirement and
-its authenticated session/target contract. The additional work fits in an exec
-backend and a terminal adapter, plus a container action in the model. This is an
-engineering assessment, not a claim that the stream/terminal implementation has
-already passed testing.
+ket uses **client-go remotecommand with a native terminal handoff**. That preserves
+the no-kubectl runtime requirement and the authenticated session/target contract.
+The addition consists of an exec backend, terminal/input adapters, and a running
+container picker. The current default command is `/bin/sh`, configurable through
+`shell` in the user's YAML settings. Distroless/missing shells fail normally.
 
 If shortest implementation time takes priority, the k9s-style optional kubectl
 path is also reasonable. It should be explicitly optional and preserve the
@@ -70,11 +70,12 @@ For the native implementation:
   privileged execution, node access, or injected debug containers.
 - Support a configurable shell command with a small bash/sh default. Report a
   missing shell normally; distroless images do not necessarily contain one.
-- Move the current reverse-sort `s` shortcut to `S` when shell support is added;
-  `:sort` remains available. The current release still uses `s` for sort.
+- Reverse sorting uses `S`; `:sort` remains available.
 
-Qualify normal exit, Ctrl+C, resize, missing shell, terminated/replaced pod, RBAC
-denial, network interruption, authentication refresh, old-context cancellation,
-and both transport paths in a disposable cluster before shipping the key.
+Normal exit, Ctrl+C, Ctrl+] disconnect, resize, missing shell recovery, RBAC
+denial, and both transport paths passed disposable-cluster checks. Unit tests
+cover stale UID rejection, session cancellation, canceled handshakes, and input
+worker shutdown. Provider-specific authentication refresh and exhaustive network
+failure scenarios remain outside the verified coverage.
 [Kubernetes shell task](https://kubernetes.io/docs/tasks/debug/debug-application/get-shell-running-container/)
 provides the baseline pod/container exec workflow.

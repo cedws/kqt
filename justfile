@@ -16,6 +16,7 @@ check:
 
 smoke: build
     python3 scripts/tui-smoke.py --binary bin/ket
+    python3 scripts/operator-smoke.py --binary bin/ket
 
 smoke-live: build
     sh scripts/live-smoke.sh

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	jsonpatch "gopkg.in/evanphx/json-patch.v4"
+	"io"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -96,6 +98,12 @@ func NewDemo() *Demo {
 	e.Object["type"] = "Warning"
 	e.Object["reason"] = "BackOff"
 	e.Object["message"] = "Back-off restarting failed container web"
+	for _, object := range d.objects {
+		if object.GetKind() == "Pod" && object.GetNamespace() == "default" {
+			e.Object["involvedObject"] = map[string]interface{}{"uid": string(object.GetUID()), "name": object.GetName(), "namespace": object.GetNamespace(), "kind": "Pod"}
+			break
+		}
+	}
 	add("exploration.ket.dev/v1", "Widget", "platform", "example", map[string]interface{}{"description": "Discovered custom resource"}, map[string]interface{}{"phase": "Ready"})
 	return d
 }
@@ -117,8 +125,14 @@ func (d *Demo) List(ctx context.Context, q Query) ([]unstructured.Unstructured, 
 		if o.GetKind() != q.Resource.Kind || q.Resource.Namespaced && q.Namespace != "" && o.GetNamespace() != q.Namespace || !selector.Matches(labels.Set(o.GetLabels())) {
 			continue
 		}
-		if q.Fields != "" && q.Fields != "spec.nodeName="+Text(o, "spec", "nodeName") {
-			continue
+		if q.Fields != "" {
+			if strings.HasPrefix(q.Fields, "involvedObject.uid=") {
+				if strings.TrimPrefix(q.Fields, "involvedObject.uid=") != Text(o, "involvedObject", "uid") {
+					continue
+				}
+			} else if q.Fields != "spec.nodeName="+Text(o, "spec", "nodeName") {
+				continue
+			}
 		}
 		result = append(result, *o.DeepCopy())
 	}
@@ -135,6 +149,53 @@ func (d *Demo) Logs(ctx context.Context, ns, pod, container string, previous boo
 	return fmt.Sprintf("2026-10-12T12:00:00Z [%s/%s:%s] starting%s\n2026-10-12T12:00:01Z configuration loaded\n2026-10-12T12:00:02Z listening on :80\n2026-10-12T12:00:05Z GET /health 200\n2026-10-12T12:00:08Z GET / 200", ns, pod, container, suffix), nil
 }
 func (*Demo) Close() {}
+
+func (d *Demo) Metrics(ctx context.Context, kind, namespace string) (map[string]Usage, error) {
+	resource, _ := Resolve(Builtins(), strings.ToLower(kind))
+	objects, err := d.List(ctx, Query{Resource: resource, Namespace: namespace})
+	if err != nil {
+		return nil, err
+	}
+	usage := map[string]Usage{}
+	for index, object := range objects {
+		usage[UsageKey(object)] = Usage{int64((index + 1) * 35), int64(index+1) * 24 * 1024 * 1024}
+	}
+	return usage, nil
+}
+func (d *Demo) StreamLogs(ctx context.Context, namespace, pod, container string, since *time.Time) (io.ReadCloser, error) {
+	reader, writer := io.Pipe()
+	go func() {
+		defer writer.Close()
+		done := make(chan struct{})
+		defer close(done)
+		go func() {
+			select {
+			case <-ctx.Done():
+				writer.CloseWithError(ctx.Err())
+			case <-done:
+			}
+		}()
+		if since == nil {
+			text, _ := d.Logs(ctx, namespace, pod, container, false)
+			if _, err := fmt.Fprintln(writer, text); err != nil {
+				return
+			}
+		}
+		timer := time.NewTicker(time.Second)
+		defer timer.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case stamp := <-timer.C:
+				if _, err := fmt.Fprintf(writer, "%s live heartbeat %s/%s\n", stamp.UTC().Format(time.RFC3339Nano), namespace, pod); err != nil {
+					return
+				}
+			}
+		}
+	}()
+	return reader, nil
+}
 
 func (d *Demo) Get(ctx context.Context, r Resource, namespace, name string) (unstructured.Unstructured, error) {
 	if ctx.Err() != nil {

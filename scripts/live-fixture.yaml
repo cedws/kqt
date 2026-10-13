@@ -10,6 +10,36 @@ metadata:
   namespace: ket-test
 ---
 apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ket-reader
+  namespace: ket-test
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ket-reader
+  namespace: ket-test
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ket-reader
+  namespace: ket-test
+subjects:
+  - kind: ServiceAccount
+    name: ket-reader
+    namespace: ket-test
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ket-reader
+---
+apiVersion: v1
 kind: Pod
 metadata:
   name: ket-log-fixture
@@ -17,10 +47,26 @@ metadata:
   labels:
     app: ket-fixture
 spec:
+  terminationGracePeriodSeconds: 1
   containers:
     - name: fixture
       image: busybox:1.37
-      command: ["sh", "-c", "echo ket-live-log-marker; sleep 3600"]
+      command: ["sh", "-c", "mkdir -p /www; echo ket-forward-marker > /www/index.html; httpd -p 8080 -h /www; while true; do echo ket-live-log-marker; sleep 1; done"]
+      ports:
+        - name: fixture-http
+          containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ket-http
+  namespace: ket-test
+spec:
+  selector:
+    app: ket-fixture
+  ports:
+    - port: 80
+      targetPort: fixture-http
 ---
 apiVersion: v1
 kind: Secret
@@ -76,10 +122,11 @@ spec:
       labels:
         app: ket-deployment
     spec:
+      terminationGracePeriodSeconds: 1
       containers:
         - name: fixture
           image: busybox:1.37
-          command: ["sh", "-c", "echo ket-deployment-log-marker-$POD_NAME; sleep 3600"]
+          command: ["sh", "-c", "while true; do echo ket-deployment-log-marker-$POD_NAME; sleep 1; done"]
           env:
             - name: POD_NAME
               valueFrom:
@@ -114,10 +161,11 @@ spec:
       labels:
         app: ket-stateful
     spec:
+      terminationGracePeriodSeconds: 1
       containers:
         - name: fixture
           image: busybox:1.37
-          command: ["sh", "-c", "echo ket-stateful-log-marker-$POD_NAME; sleep 3600"]
+          command: ["sh", "-c", "while true; do echo ket-stateful-log-marker-$POD_NAME; sleep 1; done"]
           env:
             - name: POD_NAME
               valueFrom:

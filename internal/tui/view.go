@@ -97,7 +97,7 @@ func (m *model) table(width, height int) string {
 		widths[i] = min(12, max(4, ansi.StringWidth(heading(c))+2))
 		desired[i] = widths[i]
 		for _, o := range m.visible {
-			desired[i] = max(desired[i], min(64, ansi.StringWidth(kube.Safe(kube.Column(o, c)))))
+			desired[i] = max(desired[i], min(64, ansi.StringWidth(kube.Safe(m.column(o, c)))))
 		}
 		if c == "name" {
 			desired[i] = min(64, desired[i]+1)
@@ -152,7 +152,7 @@ func (m *model) table(width, height int) string {
 		o := m.visible[i]
 		cells = nil
 		for j, c := range cols {
-			value := fit(kube.Safe(kube.Column(o, c)), widths[j])
+			value := fit(kube.Safe(m.column(o, c)), widths[j])
 			if c == "status" && i != m.selected {
 				value = m.theme.style(m.statusToken(kube.Status(o))).Render(value)
 			}
@@ -216,6 +216,9 @@ func (m *model) pickerView(width, height int) string {
 		lines = append(lines, "No matches")
 	}
 	lines = append(lines, "", " Type to search · ↑/↓ Ctrl+J/K move · Enter select · Esc close")
+	if m.pickerKind == "forwards" {
+		lines[len(lines)-1] = " Type to search · ↑/↓ select · x stop · Esc close"
+	}
 	return m.frame(strings.Title(m.pickerKind), strings.Join(lines, "\n"), width, height, true)
 }
 func (m *model) View() tea.View {
@@ -280,6 +283,9 @@ func (m *model) View() tea.View {
 		lines = append(lines, body)
 		status, token := m.notice, "warning"
 		if status == "" {
+			status = m.metricsWarning
+		}
+		if status == "" {
 			status = m.discoveryWarning
 		}
 		if status == "" {
@@ -293,7 +299,7 @@ func (m *model) View() tea.View {
 			status = " STALE · " + m.dataErr
 			token = "error"
 		}
-		if m.mode == "command" || m.mode == "filter" {
+		if m.mode == "command" || m.mode == "filter" || m.mode == "log-search" || m.mode == "log-save" {
 			status = m.input.View()
 			token = "foreground"
 		}
@@ -305,9 +311,12 @@ func (m *model) View() tea.View {
 		if m.inspectorFocused {
 			help = " j/k scroll  Ctrl+U/D page  g/G ends  Tab/Esc list  ? help  q quit"
 		}
+		if m.mode == "logs" || m.mode == "log-search" || m.mode == "log-save" {
+			help = " Space pause  / search  f live/snapshot  o save  c container  p previous  Esc close"
+		}
 		lines = append(lines, m.theme.style("muted").Render(fit(help, w)))
 		content = strings.Join(lines, "\n")
-		if m.mode == "picker" || m.mode == "details" || m.mode == "logs" || m.mode == "help" || m.mode == "edit-error" {
+		if m.mode == "picker" || m.mode == "details" || m.mode == "logs" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "events" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" {
 			mw, mh := w-4, h-4
 			modal := ""
 			if m.mode == "picker" {

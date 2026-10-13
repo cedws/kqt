@@ -68,5 +68,45 @@ All Kubernetes writes targeted this disposable cluster, which was removed.
 
 The editor fixture uses a real child process configured through YAML, changes a
 resource annotation, and returns to the TUI. Provider-specific editors/auth flows
-and continuous log streaming were not qualified. Shell support was investigated
-separately and is not implemented.
+remain unqualified. Continuous logs and shells were outside this milestone;
+their subsequent qualification appears below.
+
+## Operator tools qualification (2026-10-13)
+
+The new live-log, selected-event, metrics, shell, and forwarding implementation
+passed 49 unit/contract/model tests with the race detector. The optional
+`TestLiveOperator` qualification additionally passed in a disposable
+v1.36.2+k3s1 cluster. Native build and all four CGO-disabled cross-builds passed:
+darwin/amd64, darwin/arm64, linux/amd64, linux/arm64. Architecture was inspected;
+cross-built executables were not run on every target platform.
+
+Live API checks verified scoped events, pod/node metrics, actual shell command
+output, missing-shell errors, and HTTP traffic through a service's named target
+port. Both WebSocket and forced compatible-upgrade-failure SPDY paths passed.
+A service account permitted pod reads but denied exec and forwarding; both
+denials surfaced correctly. Scaling the fixture deployment to three pods while
+following logs attached the new pod automatically, then the fixture returned to
+two pods. Cancellation stopped log collection and closed forwarding listeners.
+
+Unit checks cover stalled-handshake cancellation, both client-go upgrade-error
+types, UID replacement rejection, timestamp replay suppression including distinct
+equal-time lines, bounded queues, metrics quantity aggregation/numeric sorting,
+raw manifest preservation, stale response rejection, export overwrite refusal,
+and context-switch cleanup. Terminal input consumes a local disconnect before
+the remote consumer starts reading, and exits before terminal ownership returns.
+
+The existing three-layout PTY checks and saved-state restart checks passed against
+the live fixture. `scripts/operator-smoke.py` passed in demo and live modes at
+80x24. The live shell was resized to 132x36 and its remote terminal reported that
+size; Ctrl+C interrupted a remote sleep, a subsequent command ran, normal exit
+and Ctrl+] returned to ket, and a missing shell produced a recoverable error.
+Log pause/search/export, live/snapshot switching, scoped events, metrics columns,
+forward inspection/stop, and automatic forwarding cleanup on quit all passed.
+Terminal attributes matched their original values on exit. All disposable
+clusters were removed; the user's default kubeconfig was not changed.
+
+`go vet`, workflow linting, Python/shell syntax checks, and diff checks passed.
+CI and `just smoke` now include the demo operator check; `just smoke-live` runs
+the optional API qualification and live operator PTY check. Provider-specific
+authentication refresh, every Kubernetes/proxy/server version, and exhaustive
+network failure scenarios remain outside this coverage.

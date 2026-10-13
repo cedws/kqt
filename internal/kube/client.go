@@ -88,10 +88,11 @@ func (l *Loader) Open(name string) (Backend, string, string, error) {
 }
 
 type Client struct {
-	dynamic dynamic.Interface
-	core    typedcore.CoreV1Interface
-	http    *http.Client
-	config  *rest.Config
+	dynamic    dynamic.Interface
+	core       typedcore.CoreV1Interface
+	http       *http.Client
+	config     *rest.Config
+	streamCore typedcore.CoreV1Interface
 }
 
 func NewClient(cfg *rest.Config) (*Client, error) {
@@ -107,7 +108,15 @@ func NewClient(cfg *rest.Config) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{d, c, h, rest.CopyConfig(cfg)}, nil
+	streamConfig := rest.CopyConfig(cfg)
+	streamConfig.Timeout = 0
+	streamHTTP := *h
+	streamHTTP.Timeout = 0
+	streamCore, err := typedcore.NewForConfigAndClient(streamConfig, &streamHTTP)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{dynamic: d, core: c, http: h, config: rest.CopyConfig(cfg), streamCore: streamCore}, nil
 }
 func (c *Client) Close() { c.http.CloseIdleConnections() }
 

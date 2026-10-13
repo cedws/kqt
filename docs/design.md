@@ -58,12 +58,41 @@ leave the current UI usable and display the error.
 
 ## Logs
 
-Pod logs are bounded snapshots. Deployment/statefulset logs list actual matching
-pods in the object's namespace, then read the selected container or all
-containers with at most four concurrent requests. Each source is labelled;
-one source failure does not erase healthy logs. A per-source quota and a total
-4 MiB display bound prevent large aggregate output from growing without limit.
-Cancellation stops remaining requests and obsolete results never reopen a pane.
+Pod logs support live following and bounded snapshots. Deployment/statefulset
+logs list actual matching pods in the object's namespace. Snapshots read the
+selected container or all containers with four workers and a 4 MiB total bound.
+Live logs reconcile membership every two seconds, retain timestamp checkpoints
+across reconnects, and cap concurrent streams at 64. A serialized callback feeds
+a bounded queue; the UI retains at most 4 MiB / 10,000 lines. Pausing freezes
+rendering while collection continues. Search is a case-insensitive text filter;
+exports write the displayed buffer to a new private file. Individual source
+failures remain visible alongside healthy output. Single-pod streams stop on
+UID replacement; context changes/closing the pane cancel all sources.
+
+## Events, metrics, and connections
+
+Selected-resource events use a UID field selector, fresh identity checks, and
+newest-first ordering. Conditions accompany events. Metrics try the stable API
+then the older beta API when absent. Metrics requests have a three-second bound;
+failure never turns a successful resource read into a failed read. Usage remains
+separate from unstructured resources, preserving YAML/JSON exactly. Sorting uses
+numeric quantities; missing samples/limits remain unavailable.
+
+Shells use client-go remotecommand through Bubble Tea Exec, handing the native
+terminal over without an embedded emulator or kubectl dependency. A cancelable
+input reader and bounded queue consume Ctrl+] even during connection setup.
+Polling terminal size supplies the remote size queue, and all terminal input
+workers end before returning to Bubble Tea. The selected running container is
+revalidated against the pod UID immediately before exec.
+
+Port forwards use client-go, expose only 127.0.0.1, and bind to one reported pod.
+Service ports resolve numeric/named target ports against ready matching pods.
+Up to 16 connections run concurrently, with bounded recent history. Context
+changes and quitting cancel pending and active forwards. Both connection types
+retain session TLS/authentication, prefer WebSocket, and use SPDY fallback for
+compatible upgrade/proxy failures. A small upgrade wrapper closes the TCP socket
+on context cancellation during a stalled handshake; the SDK owns established
+streams. Handshakes are bounded without imposing that timeout on the session.
 
 ## Editor lifecycle
 
@@ -81,7 +110,7 @@ preconditions. Kubernetes supplies schema validation and authorization. Keep the
 file on failure/conflict; delete it on success or an unchanged edit. Resume the
 resource table and polling after return.
 
-Editing is the only cluster mutation currently implemented. Pod shells, port
-forwarding, metrics, continuous logs, and informer watches remain outside this
-implementation. Qualification uses backend contract tests, model tests, and
-PTY checks against demo and a disposable real Kubernetes cluster.
+Editing remains the resource mutation action, and an explicit shell can change
+container state. Informer watches, deeper resource relationships, and dedicated
+workload actions remain future work. Qualification uses backend contract tests,
+model tests, and PTY checks against demo and a disposable real Kubernetes cluster.

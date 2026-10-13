@@ -75,6 +75,8 @@ type snapshotMsg struct {
 	generation, request uint64
 	rows                []unstructured.Unstructured
 	err                 error
+	usage               map[string]kube.Usage
+	metricsError        string
 }
 type pollMsg struct{ generation, request uint64 }
 type themeHiddenMsg struct{ token uint64 }
@@ -85,48 +87,67 @@ type logsMsg struct {
 }
 
 type model struct {
-	ctx                                context.Context
-	settings                           *Settings
-	options                            Options
-	loader                             *kube.Loader
-	session                            *session
-	backend                            kube.Backend
-	resources                          []kube.Resource
-	contextName, server                string
-	generation, request, logToken      uint64
-	requestCancel, logCancel           context.CancelFunc
-	busy                               bool
-	failures                           int
-	lastRefresh                        time.Time
-	dataErr, notice, discoveryWarning  string
-	route                              route
-	history                            []route
-	rows, visible                      []unstructured.Unstructured
-	selected, horizontal               int
-	filter, previousFilter, sortColumn string
-	descending, wide                   bool
-	theme, previousTheme               theme
-	layout                             string
-	views                              map[string]viewConfig
-	inspectorFormat                    string
-	themeUntil                         time.Time
-	themeTimer                         uint64
-	completion                         completionState
-	editToken                          uint64
-	editCancel                         context.CancelFunc
-	editBuffer                         *editBuffer
-	width, height                      int
-	mode, panelTitle                   string
-	input                              textinput.Model
-	choices, matches                   []choice
-	pickerIndex                        int
-	pickerKind                         string
-	panel, inspector                   viewport.Model
-	inspectedKey, inspectorContent     string
-	inspectorFocused                   bool
-	logObject                          unstructured.Unstructured
-	logContainer                       string
-	logPrevious                        bool
+	forwardDetail                          uint64
+	ctx                                    context.Context
+	settings                               *Settings
+	options                                Options
+	loader                                 *kube.Loader
+	session                                *session
+	backend                                kube.Backend
+	resources                              []kube.Resource
+	contextName, server                    string
+	generation, request, logToken          uint64
+	requestCancel, logCancel               context.CancelFunc
+	busy                                   bool
+	failures                               int
+	lastRefresh                            time.Time
+	dataErr, notice, discoveryWarning      string
+	route                                  route
+	history                                []route
+	rows, visible                          []unstructured.Unstructured
+	selected, horizontal                   int
+	filter, previousFilter, sortColumn     string
+	descending, wide                       bool
+	theme, previousTheme                   theme
+	layout                                 string
+	views                                  map[string]viewConfig
+	inspectorFormat                        string
+	themeUntil                             time.Time
+	themeTimer                             uint64
+	completion                             completionState
+	editToken                              uint64
+	editCancel                             context.CancelFunc
+	editBuffer                             *editBuffer
+	width, height                          int
+	mode, panelTitle                       string
+	input                                  textinput.Model
+	choices, matches                       []choice
+	pickerIndex                            int
+	pickerKind                             string
+	panel, inspector                       viewport.Model
+	inspectedKey, inspectorContent         string
+	inspectorFocused                       bool
+	logObject                              unstructured.Unstructured
+	logContainer                           string
+	logPrevious                            bool
+	logFollow, logPaused, logTail, logDone bool
+	logFeed                                *logFeed
+	logLines                               []string
+	logSize, logDropped                    int
+	logSearch                              string
+	pickerReturn                           string
+	metricsEnabled                         bool
+	usage                                  map[string]kube.Usage
+	metricsWarning                         string
+	eventObject                            unstructured.Unstructured
+	eventToken                             uint64
+	eventCancel                            context.CancelFunc
+	shellObject                            unstructured.Unstructured
+	shellContainer                         string
+	shellToken                             uint64
+	shellCancel                            context.CancelFunc
+	forwardID                              uint64
+	forwards                               map[uint64]*forwardSession
 }
 
 func newModel(ctx context.Context, s *Settings, o Options, l *kube.Loader) (*model, error) {
@@ -201,6 +222,9 @@ func (m *model) close() {
 		m.requestCancel()
 	}
 	m.closeLog()
+	m.closeEvents()
+	m.cancelShell()
+	m.stopForwards()
 	m.cancelEdit()
 	m.session.close()
 }
@@ -225,6 +249,9 @@ func (m *model) connect(name string) tea.Cmd {
 	m.inspectorFocused = false
 	m.lastRefresh = time.Time{}
 	m.failures = 0
+	m.usage = nil
+	m.metricsWarning = ""
+	m.forwards = nil
 	if m.contextName != name {
 		m.route.namespace = ""
 		m.options.Namespace = ""
@@ -274,7 +301,7 @@ func (m *model) connect(name string) tea.Cmd {
 	}
 }
 func (m *model) fetch() tea.Cmd {
-	if m.backend == nil || m.busy {
+	if m.backend == nil || m.busy || m.mode == "shell" || m.mode == "editing" || m.mode == "edit-loading" {
 		return nil
 	}
 	m.busy = true
@@ -282,10 +309,35 @@ func (m *model) fetch() tea.Cmd {
 	g, id, b, r := m.generation, m.request, m.backend, m.route
 	ctx, cancel := context.WithTimeout(m.session.ctx, 15*time.Second)
 	m.requestCancel = cancel
+	metrics := m.hasMetrics() && (r.resource.Kind == "Pod" || r.resource.Kind == "Node")
 	return func() tea.Msg {
 		defer cancel()
+		var usage map[string]kube.Usage
+		var metricsError string
+		var tasks sync.WaitGroup
+		if metrics {
+			tasks.Add(1)
+			go func() {
+				defer tasks.Done()
+				if reader, ok := b.(kube.MetricsReader); ok {
+					var err error
+					metricsContext, done := context.WithTimeout(ctx, 3*time.Second)
+					defer done()
+					usage, err = reader.Metrics(metricsContext, r.resource.Kind, r.namespace)
+					if err != nil {
+						metricsError = kube.Safe(err.Error())
+					}
+				} else {
+					metricsError = "Metrics API unavailable"
+				}
+			}()
+		}
 		rows, err := b.List(ctx, kube.Query{Resource: r.resource, Namespace: r.namespace, Labels: r.labels, Fields: r.fields})
-		return snapshotMsg{g, id, rows, err}
+		tasks.Wait()
+		if metrics && len(rows) > 0 && len(usage) == 0 && metricsError == "" {
+			metricsError = "Metrics API is available; waiting for samples"
+		}
+		return snapshotMsg{generation: g, request: id, rows: rows, err: err, usage: usage, metricsError: metricsError}
 	}
 }
 func (m *model) poll() tea.Cmd {
@@ -309,6 +361,7 @@ func (m *model) navigate(r route, remember bool) tea.Cmd {
 		m.requestCancel()
 	}
 	m.closeLog()
+	m.closeEvents()
 	m.request++
 	m.busy = false
 	m.rows = nil
@@ -321,6 +374,8 @@ func (m *model) navigate(r route, remember bool) tea.Cmd {
 	m.notice = ""
 	m.lastRefresh = time.Time{}
 	m.failures = 0
+	m.usage = nil
+	m.metricsWarning = ""
 	m.inspectorFocused = false
 	m.route = r
 	m.applyView()
@@ -356,6 +411,13 @@ func (m *model) columns() []string {
 			}
 		}
 	}
+	if m.metricsEnabled && (m.route.resource.Kind == "Pod" || m.route.resource.Kind == "Node") {
+		for _, c := range []string{"cpu", "memory"} {
+			if !slices.Contains(cols, c) {
+				cols = append(cols, c)
+			}
+		}
+	}
 	if m.route.namespace != "" || !m.route.resource.Namespaced {
 		cols = slices.DeleteFunc(cols, func(c string) bool { return c == "namespace" })
 	}
@@ -369,9 +431,24 @@ func (m *model) current() (unstructured.Unstructured, bool) {
 }
 func (m *model) rebuild(key string) {
 	slices.SortStableFunc(m.rows, func(a, b unstructured.Unstructured) int {
-		av, bv := kube.Column(a, m.sortColumn), kube.Column(b, m.sortColumn)
+		av, bv := m.column(a, m.sortColumn), m.column(b, m.sortColumn)
 		n := strings.Compare(av, bv)
-		if m.sortColumn == "age" {
+		if metricColumn(m.sortColumn) {
+			an, ao := m.metricValue(a, m.sortColumn)
+			bn, bo := m.metricValue(b, m.sortColumn)
+			if ao != bo {
+				if ao {
+					return -1
+				}
+				return 1
+			}
+			n = 0
+			if an < bn {
+				n = -1
+			} else if an > bn {
+				n = 1
+			}
+		} else if m.sortColumn == "age" {
 			at, bt := a.GetCreationTimestamp(), b.GetCreationTimestamp()
 			n = bt.Time.Compare(at.Time)
 		} else {
@@ -459,18 +536,22 @@ func (m *model) closeLog() {
 		m.logCancel()
 		m.logCancel = nil
 	}
+	m.logFeed = nil
 }
 func (m *model) loadLogs() tea.Cmd {
+	if m.logFollow && !m.logPrevious {
+		return m.followLogs()
+	}
 	m.closeLog()
 	g, token, b, o, c, previous := m.generation, m.logToken, m.backend, m.logObject, m.logContainer, m.logPrevious
 	ctx, cancel := context.WithTimeout(m.session.ctx, 30*time.Second)
 	m.logCancel = cancel
 	m.mode = "logs"
 	m.panel.SoftWrap = true
-	m.panelTitle = "Logs · " + o.GetNamespace() + "/" + o.GetName() + ":" + c
-	if previous {
-		m.panelTitle += " · previous"
-	}
+	m.logPaused = false
+	m.logSearch = ""
+	m.logDone = true
+	m.logTitle()
 	m.panel.SetContent("Loading logs…")
 	m.panel.GotoTop()
 	return func() tea.Msg {
@@ -535,6 +616,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.dataErr = ""
 			m.failures = 0
 			m.lastRefresh = time.Now()
+			m.usage, m.metricsWarning = v.usage, v.metricsError
 			m.rebuild(key)
 		}
 		return m, m.poll()
@@ -554,7 +636,31 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				content = "No log lines returned."
 			}
 			m.panel.SetContent(content)
+			m.logLines = strings.Split(content, "\n")
+			m.logSize = len(content)
+			m.logDropped = 0
+			m.logTail = false
 		}
+	case logPulseMsg:
+		return m, m.logPulse(v)
+	case logSavedMsg:
+		if v.err != nil {
+			m.notice = "Unable to save logs: " + kube.Safe(v.err.Error())
+		} else {
+			m.notice = "Logs saved to " + kube.Safe(v.path)
+		}
+	case eventsMsg:
+		if v.generation == m.generation && v.token == m.eventToken && m.mode == "events" {
+			if v.err != nil {
+				m.panel.SetContent("Unable to read events: " + kube.Safe(v.err.Error()) + "\n\nCtrl+R retries; Esc closes.")
+			} else {
+				m.panel.SetContent(v.content)
+			}
+		}
+	case shellClosedMsg:
+		return m, m.shellClosed(v)
+	case forwardMsg:
+		return m, m.forwardUpdate(v)
 	case themeHiddenMsg:
 		if v.token == m.themeTimer {
 			m.themeUntil = time.Time{}
@@ -568,7 +674,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		return m, m.key(v)
 	default:
-		if m.mode == "command" || m.mode == "filter" || m.mode == "picker" {
+		if m.mode == "command" || m.mode == "filter" || m.mode == "picker" || m.mode == "log-search" || m.mode == "log-save" {
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
 			return m, cmd

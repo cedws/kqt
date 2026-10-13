@@ -11,7 +11,7 @@ type completionState struct {
 	index   int
 }
 
-var commandNames = []string{"api", "columns", "context", "contexts", "ctx", "edit", "help", "inspector", "label", "labels", "layout", "layouts", "logs", "namespace", "ns", "q", "quit", "refresh", "resources", "sort", "theme", "themes", "write"}
+var commandNames = []string{"api", "columns", "context", "contexts", "ctx", "edit", "events", "forward", "forwards", "help", "inspector", "label", "labels", "layout", "layouts", "logs", "metrics", "namespace", "ns", "q", "quit", "refresh", "resources", "shell", "sort", "theme", "themes", "write"}
 
 func (m *model) completeCommand(reverse bool) {
 	value := m.input.Value()
@@ -66,6 +66,12 @@ func (m *model) completeCommand(reverse bool) {
 				names = append(m.columns(), "name", "age", "status", "restarts")
 			case "logs":
 				names = []string{"previous"}
+			case "events":
+				names = []string{"selected"}
+			case "metrics":
+				names = []string{"on", "off"}
+			case "forward":
+				names = []string{"stop all"}
 			}
 			for _, name := range names {
 				candidates = append(candidates, prefix+name)

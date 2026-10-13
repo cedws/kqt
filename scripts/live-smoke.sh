@@ -2,7 +2,7 @@
 # All Kubernetes writes target the disposable cluster created below.
 set -eu
 cd "$(dirname "$0")/.."
-for dependency in k3d kubectl python3; do
+for dependency in k3d kubectl python3 go; do
     command -v "$dependency" >/dev/null || { echo "Required: $dependency" >&2; exit 1; }
 done
 test -x bin/ket || { echo 'Build bin/ket first (just build).' >&2; exit 1; }
@@ -25,4 +25,18 @@ kubectl --kubeconfig "$test_root/config" apply -f scripts/live-widget.yaml
 kubectl --kubeconfig "$test_root/config" wait --for=condition=Ready pod/ket-log-fixture -n ket-test --timeout=90s
 kubectl --kubeconfig "$test_root/config" rollout status deployment/ket-deployment -n ket-test --timeout=90s
 kubectl --kubeconfig "$test_root/config" rollout status statefulset/ket-stateful -n ket-test --timeout=90s
+kubectl --kubeconfig "$test_root/config" get pod ket-log-fixture -n ket-test -o json > "$test_root/pod.json"
+python3 - "$test_root" <<'PY'
+import datetime, json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+pod = json.loads((root / 'pod.json').read_text())
+event = {'apiVersion': 'v1', 'kind': 'Event', 'metadata': {'name': 'ket-fixture-event', 'namespace': 'ket-test'},
+         'involvedObject': {'apiVersion': 'v1', 'kind': 'Pod', 'name': 'ket-log-fixture', 'namespace': 'ket-test', 'uid': pod['metadata']['uid']},
+         'type': 'Normal', 'reason': 'KetFixture', 'message': 'ket-event-marker', 'count': 1,
+         'lastTimestamp': datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00', 'Z')}
+(root / 'event.json').write_text(json.dumps(event))
+PY
+kubectl --kubeconfig "$test_root/config" apply -f "$test_root/event.json"
+KET_LIVE_KUBECONFIG="$test_root/config" go test -race ./internal/kube -run '^TestLiveOperator$' -v -count=1 -timeout=4m
 python3 scripts/tui-smoke.py --kubeconfig "$test_root/config" "$@"
+python3 scripts/operator-smoke.py --kubeconfig "$test_root/config"

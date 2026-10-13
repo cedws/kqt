@@ -44,6 +44,7 @@ type config struct {
 	InspectorFormat string                   `toml:"inspector_format,omitempty" yaml:"inspector_format,omitempty"`
 	Refresh         string                   `toml:"refresh_interval" yaml:"refresh_interval"`
 	Editor          string                   `toml:"editor,omitempty" yaml:"editor,omitempty"`
+	Shell           string                   `toml:"shell,omitempty" yaml:"shell,omitempty"`
 	Views           map[string]viewConfig    `toml:"views,omitempty" yaml:"views,omitempty"`
 	Layouts         map[string]layoutProfile `toml:"layouts,omitempty" yaml:"layouts,omitempty"`
 	Contexts        map[string]contextState  `toml:"contexts,omitempty" yaml:"contexts,omitempty"`
@@ -149,6 +150,11 @@ func LoadSettings(path string) (*Settings, error) {
 	if c.InspectorFormat != "yaml" && c.InspectorFormat != "json" {
 		return nil, fmt.Errorf("inspector_format must be yaml or json")
 	}
+	if c.Shell != "" {
+		if _, err := editorArgs(c.Shell); err != nil {
+			return nil, fmt.Errorf("invalid shell command: %w", err)
+		}
+	}
 	if c.Namespace != "" && len(validation.IsDNS1123Label(c.Namespace)) > 0 {
 		return nil, fmt.Errorf("invalid saved namespace %q", c.Namespace)
 	}
@@ -200,7 +206,7 @@ func validColumn(s string) bool {
 	if strings.HasPrefix(s, "/") {
 		return len(s) <= 256 && !strings.ContainsAny(s, "\n\r\x1b") && !regexp.MustCompile(`~([^01]|$)`).MatchString(s)
 	}
-	return slices.Contains([]string{"name", "namespace", "kind", "status", "age", "ready", "restarts", "node", "ip", "type", "ports", "labels", "reason", "message"}, s)
+	return slices.Contains([]string{"name", "namespace", "kind", "status", "age", "ready", "restarts", "node", "ip", "type", "ports", "labels", "reason", "message", "cpu", "memory", "cpu%", "memory%"}, s)
 }
 func cloneViews(values map[string]viewConfig) map[string]viewConfig {
 	r := map[string]viewConfig{}
@@ -279,6 +285,7 @@ all_namespaces: false
 inspector_format: yaml
 refresh_interval: 2s
 # editor: "code --wait" # default: $EDITOR, then $VISUAL, then vi
+# shell: "/bin/sh" # command inside the selected running container
 
 views:
   pods:
