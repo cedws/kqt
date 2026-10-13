@@ -22,3 +22,4 @@ jobs:
       - run: python3 scripts/operator-smoke.py
       - run: python3 scripts/features-smoke.py --feature relations
       - run: python3 scripts/features-smoke.py --feature manifest
+      - run: python3 scripts/features-smoke.py --feature actions

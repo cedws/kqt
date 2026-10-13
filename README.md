@@ -413,3 +413,20 @@ available independently. Clipboard requests are limited to 1 MiB.
 Secret exports are redacted while values are hidden. After `x` reveals a Secret,
 copy/export uses its original Kubernetes base64 data, rather than the decoded
 inspection form. Hiding values restores redacted exports.
+
+## Workload actions
+
+`a` / `:actions` lists actions for the selected resource. Deployments,
+StatefulSets and ReplicaSets support `:scale N`; Deployments, StatefulSets and
+DaemonSets support `:restart`. CronJobs support `:suspend`, `:resume`, and `:run`
+(create one Job immediately from the job template). `D` / `:delete` requests
+normal Kubernetes deletion of the selected resource.
+
+Every action shows the context, resource and intended change, then requires its
+exact `namespace/name` (or name for a cluster-scoped resource) to confirm.
+Escape cancels. The resource UID and desired specification are checked before applying; patches
+and deletions carry identity/version preconditions. Background status updates
+are accepted, while changed specifications require a fresh selection. Permissions are enforced by Kubernetes. A successful request
+is reported separately from controller reconciliation; `S` shows rollout status
+and events. Cancelling a request already in progress does not roll back changes;
+refresh to check its final state.

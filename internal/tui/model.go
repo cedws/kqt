@@ -87,6 +87,9 @@ type logsMsg struct {
 }
 
 type model struct {
+	actionToken                              uint64
+	actionCancel                             context.CancelFunc
+	actionPlan                               *kube.ActionPlan
 	manifestContent, manifestReturn          string
 	relationToken                            uint64
 	relationCancel                           context.CancelFunc
@@ -241,6 +244,7 @@ func (m *model) Init() tea.Cmd {
 	return tea.Batch(m.connect(m.contextName), m.themeTimeout())
 }
 func (m *model) close() {
+	m.cancelAction()
 	m.manifestContent = ""
 	m.cancelRelations()
 	m.clearSecret()
@@ -383,6 +387,7 @@ func (m *model) poll() tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg { return pollMsg{g, id} })
 }
 func (m *model) navigate(r route, remember bool) tea.Cmd {
+	m.cancelAction()
 	m.manifestContent = ""
 	m.cancelRelations()
 	if remember {
@@ -612,6 +617,8 @@ func (m *model) loadLogs() tea.Cmd {
 }
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch v := msg.(type) {
+	case actionResultMsg:
+		return m, m.actionResult(v)
 	case manifestSavedMsg:
 		if v.generation == m.generation {
 			if v.err != nil {
@@ -769,7 +776,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseWheelMsg:
 		m.mouseWheel(v)
 	default:
-		if m.mode == "command" || m.mode == "filter" || m.mode == "picker" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" {
+		if m.mode == "command" || m.mode == "filter" || m.mode == "picker" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" || m.mode == "action-confirm" {
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
 			return m, cmd

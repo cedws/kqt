@@ -108,6 +108,7 @@ func NewDemo() *Demo {
 	}
 	add("exploration.kqt.dev/v1", "Widget", "platform", "example", map[string]interface{}{"description": "Discovered custom resource"}, map[string]interface{}{"phase": "Ready"})
 	demoRelationships(d)
+	demoActions(d)
 	return d
 }
 func (d *Demo) Resources(context.Context) ([]Resource, error) {

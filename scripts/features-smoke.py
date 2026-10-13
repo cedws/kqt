@@ -72,6 +72,25 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
             send(':pvc\r'); expect('persistentvolumeclaims [1]')
             send('b'); expect('bound volume'); send('\r'); expect('persistentvolumes [1]')
             send('b'); expect('bound claim'); send('\x1b')
+        elif args.feature=='actions':
+            send(':deploy\r'); expect('deployments.apps [1]')
+            send(':scale 3\r'); expect('Confirm scale')
+            send('wrong\r'); expect('Type the exact resource name')
+            send('\x1b'); expect('deployments.apps [1]')
+            send(':scale 3\r'); expect('Confirm scale'); send('default/web\r'); expect('scale requested')
+            target=root/'scaled.json'; send(':export json "'+str(target)+'"\r'); expect('Manifest saved to')
+            assert json.loads(target.read_text())['spec']['replicas']==3
+            send(':restart\r'); expect('Confirm restart'); send('default/web\r'); expect('restart requested')
+            send(':cronjobs\r'); expect('cronjobs.batch [1]')
+            for action in ['suspend','resume','run']:
+                send(':'+action+'\r'); expect('Confirm '+action); send('default/nightly-report\r')
+                expect('Created Job' if action=='run' else action+' requested')
+            send(':jobs\r'); expect('jobs.batch [1]')
+            send('D'); expect('Confirm delete')
+            # Read the exact generated Job name from its exported API manifest.
+            send('\x1b'); target=root/'job.json'; send(':export json "'+str(target)+'"\r'); expect('Manifest saved to')
+            name=json.loads(target.read_text())['metadata']['name']
+            send('D'); expect('Confirm delete'); send('default/'+name+'\r'); expect('Deletion requested'); expect('jobs.batch [0]')
         elif args.feature=='manifest':
             destination=root/'clean manifest.json'
             send(':export json clean "'+str(destination)+'"\r'); expect('Manifest saved to')

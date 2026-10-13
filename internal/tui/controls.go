@@ -66,6 +66,9 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 	if m.mode == "manifest-save" {
 		return m.manifestInputKey(msg)
 	}
+	if m.mode == "action-confirm" {
+		return m.actionInputKey(msg)
+	}
 	if m.mode == "event-search" || m.mode == "event-save" {
 		return m.eventsInputKey(msg)
 	}
@@ -115,6 +118,10 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	if m.mode == "edit-loading" || m.mode == "editing" {
 		if k == "esc" || k == "q" {
+			if m.mode == "action-running" {
+				m.cancelAction()
+				m.notice = "Action request cancelled; refresh to check the final state"
+			}
 			m.cancelEdit()
 			m.mode = ""
 			m.notice = "Edit cancelled"
@@ -257,6 +264,10 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	switch k {
+	case "a":
+		return m.openPicker("actions")
+	case "D":
+		return m.actionCommand("delete", "")
 	case "C":
 		return m.copyManifest(m.manifestFormat(), false)
 	case "o":
@@ -533,6 +544,10 @@ func (m *model) command(value string) tea.Cmd {
 		return m.selectTheme(t)
 	case "resources", "api":
 		return m.openPicker("resources")
+	case "actions":
+		return m.openPicker("actions")
+	case "scale", "restart", "suspend", "resume", "run", "delete":
+		return m.actionCommand(cmd, arg)
 	case "copy":
 		return m.manifestCommand(arg, true)
 	case "export":
@@ -643,6 +658,12 @@ func (m *model) openPicker(kind string) tea.Cmd {
 	m.choices = nil
 	m.pickerIndex = 0
 	switch kind {
+	case "actions":
+		if o, ok := m.current(); ok {
+			for _, action := range kube.Actions(o.GetKind()) {
+				m.choices = append(m.choices, choice{action, "requires confirmation"})
+			}
+		}
 	case "relations":
 		for _, link := range m.relations {
 			m.choices = append(m.choices, choice{link.Key(), link.Title() + " · " + link.Reason})
@@ -771,6 +792,8 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.mode = ""
 		m.input.Blur()
 		switch m.pickerKind {
+		case "actions":
+			return m.actionCommand(c.name, "")
 		case "relations":
 			return m.selectRelation(c.name)
 		case "sort":
@@ -834,6 +857,8 @@ Explore
   c / :ctx           Search kubeconfig contexts (session only)
   r / :resources     Search discovered APIs / CRDs
   b / :related       Browse owners, backends, pods and storage relationships
+  a / :actions       Scale/restart workloads; suspend/resume/run CronJobs
+  D / :delete        Confirm deletion of the selected resource
   :po :deploy :svc    Resource names, kinds, and aliases
   :labels app=web    Kubernetes label selector; :labels clears it
   d                  Describe resource with highlighted YAML

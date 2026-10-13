@@ -289,3 +289,19 @@ immutability, Secret redaction and canonical revealed data. File checks cover
 private permissions, quoted paths, exclusive creation and cancellation. The PTY
 workflow checks a real OSC52 request, reusable JSON, overwrite refusal and export
 from a JSON panel; clipboard acceptance by every terminal remains unqualified.
+
+## v0.1.0: workload actions
+
+Action checks cover scale/restart, CronJob suspend/resume/manual Jobs, deletion,
+invalid inputs, exact-name confirmation, cancellation and obsolete replies.
+HTTP contracts assert namespace routing and UID/resourceVersion preconditions
+on patches and deletes. Manual Jobs preserve the template, labels, annotations
+and CronJob controller reference without requiring finalizer permissions.
+The demo terminal check exercises every action and verifies exported API values.
+
+The action race/static checks and demo PTY flow passed. Live qualification in a
+disposable Kubernetes v1.36.2+k3s1 cluster verified scale, rollout restart,
+CronJob suspend/resume, real manual Job creation and preconditioned deletion.
+Status-only version advances are accepted; changed specifications are rejected.
+The write uses a fresh resource version, with bounded retries for API conflicts.
+The test cluster and volumes were removed after qualification.

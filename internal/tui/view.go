@@ -365,7 +365,7 @@ func (m *model) View() tea.View {
 				status += " · resynced; history may have gaps"
 			}
 		}
-		if m.mode == "command" || m.mode == "filter" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" {
+		if m.mode == "command" || m.mode == "filter" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" || m.mode == "action-confirm" {
 			status = m.input.View()
 			token = "foreground"
 		}
@@ -379,6 +379,8 @@ func (m *model) View() tea.View {
 		}
 		if m.mode == "command" {
 			help = " ↑/↓ history  Tab/Shift+Tab complete  Enter run  Esc cancel"
+		} else if m.mode == "action-confirm" {
+			help = " Type the resource name shown  Enter confirm  Esc cancel"
 		} else if m.mode == "" && len(m.resourceForwards()) > 0 {
 			help = " x stop forwards for resource  F manage forwards  : command  ? help  q quit"
 		}
@@ -404,7 +406,7 @@ func (m *model) View() tea.View {
 		}
 		lines = append(lines, m.theme.style("muted").Render(fit(help, w)))
 		content = strings.Join(lines, "\n")
-		if m.mode == "picker" || m.mode == "details" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" || m.mode == "relations-loading" {
+		if m.mode == "picker" || m.mode == "details" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" || m.mode == "relations-loading" || m.mode == "action-confirm" || m.mode == "action-running" {
 			mw, mh := w-4, h-4
 			modal := ""
 			if m.mode == "picker" {
@@ -413,6 +415,9 @@ func (m *model) View() tea.View {
 				modal = m.pickerView(mw, mh)
 			} else {
 				title := kube.Safe(m.panelTitle) + " · Esc close · hjkl scroll"
+				if m.mode == "action-confirm" {
+					title = kube.Safe(m.panelTitle) + " · Enter confirm · Esc cancel"
+				}
 				modal = m.frame(title, m.panel.View(), mw, mh, true)
 			}
 			modal = lipgloss.NewStyle().Background(m.theme.color("surface")).Foreground(m.theme.color("foreground")).Render(modal)
