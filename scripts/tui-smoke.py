@@ -185,6 +185,14 @@ sys.exit(code)
                 if has_yaml_key_colour(bytes(raw[start:])):
                     return
             raise AssertionError('YAML key did not use Catppuccin Mocha syntax colour')
+        def check_secret_toggle(marker):
+            send(b'x'); expect(marker); expect('values visible')
+            send(b'J'); expect('JSON'); expect(marker)
+            send(b'x'); expect('redacted')
+            assert marker not in screen(raw, width, height), 'x did not hide decoded values'
+            send(b'x'); expect(marker)
+            send(b'\x1b'); pump(0.4)
+            assert marker not in screen(raw, width, height), 'closing details retained decoded values'
         try:
             expected = 'pods [5]' if args.kubeconfig else 'pods [12]'
             current = expect(expected)
@@ -203,7 +211,8 @@ sys.exit(code)
                 send(b':secrets\r'); expect('fixture-secret')
                 send(b'y'); expect('<redacted>')
                 assert 'LIVE_SECRET_MUST_NOT_APPEAR' not in screen(raw, width, height)
-                send(b'\x1b'); pump(0.4); send(b':pods\r'); expect('pods [5]')
+                check_secret_toggle('LIVE_SECRET_MUST_NOT_APPEAR')
+                send(b':pods\r'); expect('pods [5]')
             else:
                 send(b'j'); expect('› web-7c9f6d8b5-0001')
                 send(b'k'); expect('› web-7c9f6d8b5-0000')
@@ -211,6 +220,9 @@ sys.exit(code)
                 send(b'\x1b'); pump(0.4); expect('pods [12]')
                 send(b'/web0003\r'); expect('pods [1]'); expect('web-7c9f6d8b5-0003')
                 send(b'\x1b'); pump(0.4); expect('pods [12]'); send(b'g')
+                send(b'E'); expect('Status & Events'); expect('Containers')
+                send(b'G'); expect('Back-off restarting'); send(b'g'); expect('Pod IP')
+                send(b'\x12'); expect('Containers'); send(b'\x1b'); pump(0.4)
                 yaml_start = len(raw)
                 send(b'y'); expect('YAML'); expect('nginx:1.28'); snapshot('yaml'); expect_yaml_highlighting(yaml_start)
                 send(b'G'); expect('restartCount'); send(b'g')
@@ -227,7 +239,7 @@ sys.exit(code)
                 send(b':widgets\r'); expect('example'); expect('Ready')
                 send(b':ns default\r:secrets\r'); expect('demo-credentials'); send(b'y'); expect('<redacted>')
                 assert 'ZGVtby1vbmx5' not in screen(raw, width, height)
-                send(b'\x1b'); pump(0.4)
+                check_secret_toggle('demo-only')
                 send(b':pods\r'); expect('pods [12]')
                 if layout != 'classic':
                     send(b'\t'); expect('Inspector · focused'); send(b'G'); expect('100%'); send(b'J'); expect('focused · JSON'); send(b'y'); expect('focused · YAML')

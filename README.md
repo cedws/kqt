@@ -79,9 +79,10 @@ picker opens. UI preferences never silently select a different Kubernetes contex
 | `Enter` | Workload/service/node → pods; otherwise describe |
 | `d`, `y` / `v`, `J` | Describe, highlighted YAML, highlighted JSON |
 | `Tab`, then `J` / `y` | Focus inspector, then switch it to JSON / YAML |
+| `x` on a Secret | Toggle decoded values in the inspector or details |
 | `L`, `P` | Live logs / previous log snapshots from a pod, deployment, or statefulset |
 | `Space`, `/`, `f`, `o` in logs | Pause, search, switch live/snapshot, save displayed logs |
-| `E`, `:events selected` | Events and conditions for the selected resource |
+| `E`, `:status`, `:events selected` | Readable status, conditions, containers, and events |
 | `m`, `:metrics on` / `off` | Toggle pod/node CPU and memory columns |
 | `s`, `:shell` | Open a shell in a running pod/container |
 | `f`, `:forward LOCAL:REMOTE` | Forward a pod/service port to localhost |
@@ -116,8 +117,14 @@ YAML and JSON use the active palette's syntax colours in full-screen panels and
 inspectors. In the table, `J` opens JSON. With the inspector focused, `J` changes
 only the inspector to JSON and `y` changes it back to YAML. In an open manifest
 panel, `J` and `y` also switch formats. `:inspector json` / `:inspector yaml` are
-available without changing focus. Secret values remain redacted throughout
-these views. Highlighting preserves displayed text, quoting, and spacing.
+available without changing focus. Secret values are hidden by default. Press
+`x` on a Secret to reveal decoded values in its inspector/describe/YAML/JSON view;
+press `x` again to hide them. Without an inspector, `x` opens the YAML panel.
+The view is labelled **values visible · decoded** while revealed. Moving to
+another resource, changing scope/context, closing details, or opening the editor
+hides values again; reveal state is never saved. Binary values are labelled and
+retain base64 text. Custom table columns stay redacted. Highlighting preserves
+displayed text, quoting, and spacing.
 
 ## Logs
 
@@ -155,8 +162,19 @@ logs, switching contexts, and quitting cancel the streams.
 
 ## Events and metrics
 
-`E` shows conditions and events for the selected resource, matched by immutable
-UID and sorted newest first. `Ctrl+R` reloads the fresh resource and its events.
+`E` (or `:status`) shows a readable status summary, pod container states/restarts,
+workload replica counts, and conditions with reasons, messages, and transition
+times. Colours distinguish readiness from failure/pressure predicates; unknown
+custom conditions retain neutral colours. Other custom-resource status fields
+appear as highlighted YAML. Resources without status say so explicitly.
+
+Events follow below, matched by immutable UID and sorted newest first. Scroll
+with `j/k` or `Ctrl+U/D`; `G` jumps to the bottom.
+`Ctrl+R` reloads the fresh resource and its events. Status remains readable if
+event permissions/API requests fail, with the event failure shown separately.
+`S` continues to reverse the table sort.
+
+![Readable status for a restarting pod](docs/screenshots/status.png)
 `:events` still opens the general events table; `:events selected` opens the
 resource-specific panel. Events may have expired from Kubernetes retention.
 
@@ -215,8 +233,9 @@ Conflicts, invalid YAML, or editor failures keep the private file and display it
 path for recovery. Successful/unchanged edits remove the temporary file and
 refresh the table. In demo mode, edits affect only the sample backend.
 
-Secrets are redacted in browsing views; editing a Secret fetches its real data
-so redaction placeholders cannot overwrite it. The edit file's directory and
+Secrets are hidden by default in browsing views, with `x` for temporary decoded
+inspection. Editing a Secret fetches its original API data, so decoded values
+or redaction placeholders cannot overwrite it. The edit file's directory and
 file permissions are private. Pod logs and other resources may contain sensitive
 content; ordinary Kubernetes RBAC still applies.
 

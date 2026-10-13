@@ -138,3 +138,41 @@ private exports contain no colour codes. Cache eviction and theme invalidation
 also passed. The refreshed log screenshot comes from an actual demo PTY capture
 and was visually inspected for JSON and plain-text colours. Both FreeBSD targets
 were rebuilt successfully with the final highlighting changes.
+
+## Decoded Secret toggle (2026-10-13)
+
+Race tests, vet, native build, and both FreeBSD cross-builds passed. `x` is checked
+in describe/YAML/JSON panels and inspector views across the three layouts; tests
+also verify UTF-8/multiline/binary decoding, unchanged original API data, default
+redaction, preserved scrolling, and terminal dimensions down to 40x12. Reading
+requires a fresh individual Secret fetch and rejects a replaced UID. Errors,
+cancelled requests, late context/selection replies, and automatic refreshes are
+covered. Closing details, changing selection/scope/context, quitting, and editing
+hide the values; custom table columns stay redacted and reveal state never changes
+the saved config. Editing still fetches original base64 values.
+
+The three-layout demo PTY checks passed with reveal, JSON switching, hiding, and
+closing a revealed panel; decoded values disappeared from the terminal screen
+after hiding/closing. Existing operator terminal checks also passed. The live
+fixture harness includes the toggle, but was not rerun against a live Kubernetes
+cluster for this change.
+
+## Readable status and events (2026-10-13)
+
+`E` / `:status` now shows a themed status summary with workload counts, pod
+container states/restarts/last exits, and conditions with reasons/messages/times.
+Regression checks cover readiness versus negative-condition polarity, unknown
+custom predicates, stale observed generations, blocked/incomplete deployments,
+terminal control sanitation, generic custom status fields, and resources without
+status. Rendering leaves original API objects unchanged. Scoped events are
+filtered locally and sorted newest first without modifying backend-owned rows.
+Event-read failures leave status visible; replaced UIDs and late responses are
+rejected. `S` still reverses the table sort, and entering status hides temporarily
+revealed Secrets.
+
+Race tests, vet, native builds, and both FreeBSD cross-builds passed. The three-layout demo PTY checks cover
+opening status, container summaries, event scrolling, refresh, and closing; the
+operator terminal check also passed. Status views fit 40x12, 80x24, and 180x48,
+replace the main pane, and preserve the connection header. The new status PNG
+was captured from the actual demo PTY and visually inspected. The disposable
+live-cluster harness was updated for the view, but not rerun for this change.

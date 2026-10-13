@@ -107,6 +107,10 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	if m.mode != "" {
 		if k == "esc" || k == "q" {
+			if m.mode == "details" {
+				m.clearSecret()
+				m.updateInspector()
+			}
 			m.closeLog()
 			m.closeEvents()
 			m.mode = ""
@@ -160,6 +164,8 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		if m.mode == "details" {
 			switch k {
+			case "x":
+				return m.toggleSecret()
 			case "J":
 				m.openDetails(false, true)
 				return nil
@@ -176,6 +182,9 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 	if k == "q" {
 		m.close()
 		return tea.Quit
+	}
+	if k == "x" {
+		return m.toggleSecret()
 	}
 	if k == "tab" || k == "shift+tab" {
 		if m.inspectorDimensions().width > 0 {
@@ -335,28 +344,54 @@ func (m *model) drillDown() tea.Cmd {
 	return nil
 }
 func (m *model) openDetails(manifest, asJSON bool) {
-	o, ok := m.current()
+	_, ok := m.current()
 	if !ok {
 		return
 	}
 	m.mode = "details"
 	m.panel.SoftWrap = false
+	m.detailFormat = "describe"
+	if manifest {
+		m.detailFormat = "yaml"
+	}
+	if asJSON {
+		m.detailFormat = "json"
+	}
+	m.renderDetails()
+	m.panel.GotoTop()
+}
+func (m *model) renderDetails() {
+	if m.mode != "details" {
+		return
+	}
+	o, ok := m.current()
+	if !ok {
+		m.panelTitle = "Details"
+		m.panel.SetContent("No resource selected.")
+		return
+	}
+	offset := m.panel.YOffset()
 	m.panelTitle = "Describe · " + o.GetName()
 	content := m.describe(o)
-	if manifest || asJSON {
+	if m.detailFormat == "yaml" || m.detailFormat == "json" {
+		asJSON := m.detailFormat == "json"
 		m.panelTitle = "YAML · " + o.GetName()
 		if asJSON {
 			m.panelTitle = "JSON · " + o.GetName()
 		}
-		content = kube.Manifest(o, asJSON)
+		content = m.manifest(o, asJSON)
 		if asJSON {
 			content = m.theme.renderJSON(content)
 		} else {
 			content = m.theme.renderYAML(content)
 		}
 	}
+	if o.GetKind() == "Secret" {
+		format, _, _ := strings.Cut(m.panelTitle, " · ")
+		m.panelTitle = format + " · " + m.secretLabel() + " · " + o.GetName()
+	}
 	m.panel.SetContent(content)
-	m.panel.GotoTop()
+	m.panel.SetYOffset(offset)
 }
 func (m *model) openLogs(previous bool) tea.Cmd {
 	o, ok := m.current()
@@ -508,6 +543,8 @@ func (m *model) command(value string) tea.Cmd {
 			return m.openEvents()
 		}
 		return m.changeResource("events", true)
+	case "status":
+		return m.openEvents()
 	case "metrics":
 		if arg == "on" {
 			m.metricsEnabled = false
@@ -726,8 +763,9 @@ Explore
   y / v, J           Open highlighted YAML / JSON
   Inspector: J / y   Switch focused inspector to JSON / YAML
   Details: J / y     Switch open manifest panel to JSON / YAML
+  Secrets: x         Toggle decoded values; hidden by default
   L / P              Logs / previous logs: pod, deployment, statefulset
-  E                  Events and conditions for the selected resource
+  E / :status        Readable status, conditions, containers, and events
   m / :metrics       Toggle pod/node CPU and memory columns
   s / :shell         Shell in a running pod/container; Ctrl+] disconnects
   f                  Forward a pod/service port (LOCAL:REMOTE; LOCAL 0 auto)
@@ -755,7 +793,9 @@ Refresh and exit
 View and namespace are saved per context in ~/.config/kqt/config.yaml.
 Themes, layouts and inspector format are saved when applied.
 The theme name is shown for ten seconds after selection.
-Kubeconfig is never modified. Secret values are redacted in UI views.
+Kubeconfig is never modified. Secret values are hidden by default; x reveals
+decoded values for the selected Secret. x, closing details, selection/context
+changes, and editing hide them again. The reveal state is never saved.
 Editing reads a fresh full object, applies a versioned patch on saved changes,
 and retains the private file on errors/conflicts. Unchanged edits do not write.
 Live logs: Space pauses, / searches, o saves, f switches live/snapshot.

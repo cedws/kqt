@@ -225,6 +225,8 @@ func (m *model) openEditor() tea.Cmd {
 		m.notice = err.Error()
 		return nil
 	}
+	m.clearSecret()
+	m.updateInspector()
 	if m.requestCancel != nil {
 		m.requestCancel()
 	}

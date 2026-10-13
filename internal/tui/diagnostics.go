@@ -15,7 +15,9 @@ import (
 
 type eventsMsg struct {
 	generation, token uint64
-	content           string
+	object            unstructured.Unstructured
+	events            []unstructured.Unstructured
+	eventsError       error
 	err               error
 }
 
@@ -24,33 +26,36 @@ func (m *model) openEvents() tea.Cmd {
 	if !ok || m.backend == nil {
 		return nil
 	}
+	m.clearSecret()
+	m.updateInspector()
 	m.eventObject = target
 	return m.loadEvents()
 }
 func (m *model) loadEvents() tea.Cmd {
 	m.closeEvents()
 	m.mode = "events"
+	m.resize()
 	m.panel.SoftWrap = true
-	m.panelTitle = "Events · " + m.eventObject.GetName()
-	m.panel.SetContent("Loading events…")
+	m.panelTitle = "Status & Events · " + m.eventObject.GetName()
+	m.panel.SetContent("Loading status and events…")
 	m.panel.GotoTop()
 	ctx, cancel := context.WithTimeout(m.session.ctx, 15*time.Second)
 	m.eventCancel = cancel
 	g, token, b, o, r := m.generation, m.eventToken, m.backend, m.eventObject, m.route.resource
 	return func() tea.Msg {
 		defer cancel()
-		if reader, ok := b.(kube.Editable); ok {
+		if reader, ok := b.(kube.ResourceGetter); ok {
 			fresh, err := reader.Get(ctx, r, o.GetNamespace(), o.GetName())
 			if err != nil {
-				return eventsMsg{g, token, "", err}
+				return eventsMsg{generation: g, token: token, err: err}
 			}
 			if fresh.GetUID() != o.GetUID() {
-				return eventsMsg{g, token, "", fmt.Errorf("resource was replaced; close events and refresh")}
+				return eventsMsg{generation: g, token: token, err: fmt.Errorf("resource was replaced; close status and refresh")}
 			}
 			o = fresh
 		}
-		content, err := kube.ResourceEvents(ctx, b, o)
-		return eventsMsg{g, token, content, err}
+		events, err := kube.EventsForResource(ctx, b, o)
+		return eventsMsg{generation: g, token: token, object: kube.Redacted(o), events: events, eventsError: err}
 	}
 }
 func (m *model) closeEvents() {

@@ -86,7 +86,19 @@ plain text, so searches can span coloured tokens and exports contain no ANSI.
 ## Events, metrics, and connections
 
 Selected-resource events use a UID field selector, fresh identity checks, and
-newest-first ordering. Conditions accompany events. Metrics try the stable API
+newest-first ordering. `E` / `:status` renders a themed status summary, workload
+replica counts, pod container state/restarts/last exits, and condition reasons,
+messages, and transition timestamps before events. Standard negative predicates
+(for example node pressure or failure) use the opposite colour polarity to
+readiness; unknown custom predicates stay neutral. Stale condition generations
+are labelled. Custom status fields remain available as highlighted YAML, and
+resources without status say so. Event-read errors do not hide readable status.
+`Ctrl+R` reloads; scrolling stays local to the panel. Status replaces the main
+pane, preserving the connection header without background inspector fragments.
+`S` retains reverse-sort.
+Node condition meanings follow the [Kubernetes Node Status reference](https://kubernetes.io/docs/reference/node/node-status/).
+Deployment progress follows the [Deployment status documentation](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#deployment-status).
+Metrics try the stable API
 then the older beta API when absent. Metrics requests have a three-second bound;
 failure never turns a successful resource read into a failed read. Usage remains
 separate from unstructured resources, preserving YAML/JSON exactly. Sorting uses
@@ -108,11 +120,28 @@ compatible upgrade/proxy failures. A small upgrade wrapper closes the TCP socket
 on context cancellation during a stalled handshake; the SDK owns established
 streams. Handshakes are bounded without imposing that timeout on the session.
 
+## Secret inspection
+
+List rows and custom columns remain redacted. `x` on the selected Secret fetches
+a fresh object with the existing Kubernetes client, checks its UID, and reveals
+a display-only copy with decoded UTF-8 data in describe/YAML/JSON/inspector views.
+Binary data is labelled with its byte count and retained base64 representation;
+`stringData` is already text. Managed fields and the duplicate last-applied
+annotation remain omitted. Titles and the status line identify decoded visible
+values. Refreshes update only the revealed object; other objects stay redacted.
+
+A second `x` cancels a pending read or hides values. Selection, scope/context
+changes, closing details, quitting, and opening the editor discard the revealed
+object and redraw redacted content. Reads have a 15-second timeout; generation
+and request tokens reject late replies. Reveal state/data is never saved to
+configuration. When no inspector is displayed, `x` opens the YAML panel.
+
 ## Editor lifecycle
 
 Editing is an explicit `e` / `:edit` action. Fetch fresh data and validate the
-selected UID before preparing a private file. Full Secret data is used for
-editing, while all UI views stay redacted. Pause polling and use Bubble Tea's
+selected UID before preparing a private file. Original Secret data is used for
+editing; temporary decoded browsing values are never used for a patch. Pause
+polling and use Bubble Tea's
 `ExecProcess` to release/reclaim the terminal around a directly executed editor
 command, parsed with quote/escape support and no shell expansion.
 

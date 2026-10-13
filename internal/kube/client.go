@@ -33,8 +33,11 @@ type Backend interface {
 	Logs(context.Context, string, string, string, bool) (string, error)
 	Close()
 }
-type Editable interface {
+type ResourceGetter interface {
 	Get(context.Context, Resource, string, string) (unstructured.Unstructured, error)
+}
+type Editable interface {
+	ResourceGetter
 	Patch(context.Context, Resource, string, string, []byte) error
 }
 type Context struct{ Name, Cluster, Namespace string }

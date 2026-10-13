@@ -87,7 +87,9 @@ def run(root, bad_shell=False):
         if bad_shell:
             send(b's'); expect('Shell failed:'); send(b'\x1b'); expect('pods [1]')
         else:
-            send(b'E'); expect('Events'); expect('kqt-event-marker' if args.kubeconfig else 'Back-off restarting'); send(b'\x1b')
+            send(b'E'); expect('Status & Events'); expect('Containers')
+            send(b'G'); expect('kqt-event-marker' if args.kubeconfig else 'Back-off restarting')
+            send(b'g'); expect('Pod IP'); send(b'\x1b')
             send(b'm'); expect('CPU'); expect('MEMORY'); send(b'm')
             send(b'L')
             if not args.kubeconfig:

@@ -304,7 +304,9 @@ func Redacted(o unstructured.Unstructured) unstructured.Unstructured {
 	return o
 }
 func Manifest(o unstructured.Unstructured, asJSON bool) string {
-	o = Redacted(o)
+	return manifestText(Redacted(o), asJSON)
+}
+func manifestText(o unstructured.Unstructured, asJSON bool) string {
 	var data []byte
 	var err error
 	if asJSON {

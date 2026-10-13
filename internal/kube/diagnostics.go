@@ -73,15 +73,31 @@ func parseUsage(values map[string]string) Usage {
 
 // Events are selected by immutable UID, including for cluster-scoped resources.
 func ResourceEvents(ctx context.Context, b Backend, target unstructured.Unstructured) (string, error) {
+	events, err := EventsForResource(ctx, b, target)
+	if err != nil {
+		return "", err
+	}
+	return resourceEventText(target, events), nil
+}
+
+func EventsForResource(ctx context.Context, b Backend, target unstructured.Unstructured) ([]unstructured.Unstructured, error) {
 	if target.GetUID() == "" {
-		return "", fmt.Errorf("resource has no UID; refresh before reading its events")
+		return nil, fmt.Errorf("resource has no UID; refresh before reading its events")
 	}
 	r, _ := Resolve(Builtins(), "events")
 	events, err := b.List(ctx, Query{Resource: r, Namespace: target.GetNamespace(), Fields: "involvedObject.uid=" + string(target.GetUID())})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+	events = slices.Clone(events)
+	events = slices.DeleteFunc(events, func(event unstructured.Unstructured) bool {
+		return Text(event, "involvedObject", "uid") != string(target.GetUID())
+	})
 	slices.SortFunc(events, func(a, b unstructured.Unstructured) int { return eventTime(b).Compare(eventTime(a)) })
+	return events, nil
+}
+
+func resourceEventText(target unstructured.Unstructured, events []unstructured.Unstructured) string {
 	var text strings.Builder
 	fmt.Fprintf(&text, "%s · %s/%s\n\n", Safe(target.GetKind()), Safe(target.GetNamespace()), Safe(target.GetName()))
 	for _, value := range Slice(target, "status", "conditions") {
@@ -109,8 +125,10 @@ func ResourceEvents(ctx context.Context, b Backend, target unstructured.Unstruct
 	if count == 0 {
 		text.WriteString("No events for this resource. Kubernetes retains events for a limited time.\n")
 	}
-	return SafeLines(text.String()), nil
+	return SafeLines(text.String())
 }
+
+func EventTime(event unstructured.Unstructured) time.Time { return eventTime(event) }
 func empty(v interface{}) interface{} {
 	if v == nil {
 		return ""

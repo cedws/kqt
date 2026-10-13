@@ -66,12 +66,13 @@ func NewDemo() *Demo {
 			spec["containers"] = append(spec["containers"].([]interface{}), map[string]interface{}{"name": "sidecar", "image": "busybox:1.37"})
 			spec["initContainers"] = []interface{}{map[string]interface{}{"name": "setup", "image": "busybox:1.37"}}
 		}
-		status := map[string]interface{}{"phase": phase, "podIP": fmt.Sprintf("10.42.%d.%d", i%3, i+10), "conditions": []interface{}{map[string]interface{}{"type": "Ready", "status": fmt.Sprintf("%t", ready)}}, "containerStatuses": []interface{}{map[string]interface{}{"name": app, "ready": ready, "restartCount": int64(i % 5), "state": state}}}
+		status := map[string]interface{}{"phase": phase, "podIP": fmt.Sprintf("10.42.%d.%d", i%3, i+10), "conditions": []interface{}{map[string]interface{}{"type": "Ready", "status": "False"}}, "containerStatuses": []interface{}{map[string]interface{}{"name": app, "ready": ready, "restartCount": int64(i % 5), "state": state}}}
 		if ready {
 			status["conditions"] = []interface{}{map[string]interface{}{"type": "Ready", "status": "True"}}
 		}
 		if i == 0 {
 			status["containerStatuses"] = append(status["containerStatuses"].([]interface{}), map[string]interface{}{"name": "sidecar", "ready": true, "restartCount": int64(0), "state": state})
+			status["initContainerStatuses"] = []interface{}{map[string]interface{}{"name": "setup", "ready": true, "restartCount": int64(0), "state": map[string]interface{}{"terminated": map[string]interface{}{"reason": "Completed", "exitCode": int64(0)}}}}
 		}
 		add("v1", "Pod", ns, fmt.Sprintf("%s-7c9f6d8b5-%04d", app, i), spec, status)
 		d.objects[len(d.objects)-1].SetLabels(map[string]string{"app": app})
@@ -81,7 +82,7 @@ func NewDemo() *Demo {
 		if ns == "platform" {
 			app = "gateway"
 		}
-		add("apps/v1", "Deployment", ns, app, map[string]interface{}{"replicas": int64(12), "selector": map[string]interface{}{"matchLabels": map[string]interface{}{"app": app}}, "template": map[string]interface{}{"spec": map[string]interface{}{"containers": []interface{}{map[string]interface{}{"name": app, "image": "nginx:1.28"}}}}}, map[string]interface{}{"readyReplicas": int64(12), "observedGeneration": int64(1)})
+		add("apps/v1", "Deployment", ns, app, map[string]interface{}{"replicas": int64(12), "selector": map[string]interface{}{"matchLabels": map[string]interface{}{"app": app}}, "template": map[string]interface{}{"spec": map[string]interface{}{"containers": []interface{}{map[string]interface{}{"name": app, "image": "nginx:1.28"}}}}}, map[string]interface{}{"replicas": int64(12), "readyReplicas": int64(12), "updatedReplicas": int64(12), "availableReplicas": int64(12), "observedGeneration": int64(1)})
 		add("v1", "Service", ns, app, map[string]interface{}{"type": "ClusterIP", "clusterIP": "10.96.0.12", "selector": map[string]interface{}{"app": app}, "ports": []interface{}{map[string]interface{}{"port": int64(80), "protocol": "TCP"}}}, nil)
 	}
 	add("apps/v1", "StatefulSet", "platform", "redis", map[string]interface{}{"replicas": int64(2), "serviceName": "redis", "selector": map[string]interface{}{"matchLabels": map[string]interface{}{"app": "redis"}}, "template": map[string]interface{}{"spec": map[string]interface{}{"containers": []interface{}{map[string]interface{}{"name": "redis", "image": "redis:8"}}}}}, map[string]interface{}{"readyReplicas": int64(2), "observedGeneration": int64(1)})

@@ -61,7 +61,7 @@ func (m *model) resize() {
 		m.input.SetWidth(max(1, min(90, m.width-4)-6))
 	}
 	panelWidth, panelHeight := m.width-6, m.height-6
-	if m.showingLogs() {
+	if m.showingLogs() || m.mode == "events" {
 		panelWidth, panelHeight = m.width-2, m.height-8
 	}
 	m.panel.SetWidth(max(1, panelWidth))
@@ -200,6 +200,12 @@ func (m *model) inspectorView(d dimensions) string {
 	if m.inspectorFocused {
 		title = fmt.Sprintf("Inspector · focused · %s · %.0f%%", strings.ToUpper(m.inspectorFormat), m.inspector.ScrollPercent()*100)
 	}
+	if o, ok := m.current(); ok && o.GetKind() == "Secret" {
+		title = "Inspector · " + m.secretLabel() + " · " + strings.ToUpper(m.inspectorFormat)
+		if m.inspectorFocused {
+			title = "Inspector · focused · " + m.secretLabel() + " · " + strings.ToUpper(m.inspectorFormat)
+		}
+	}
 	return m.frame(title, m.inspector.View(), d.width, d.height, m.inspectorFocused)
 }
 func (m *model) pickerView(width, height int) string {
@@ -275,8 +281,11 @@ func (m *model) View() tea.View {
 		bodyHeight := h - 6
 		d := m.inspectorDimensions()
 		body := ""
-		if m.showingLogs() {
-			title := m.panelTitle + " · Esc close · hjkl scroll · c container · p previous · Ctrl+R reload"
+		if m.showingLogs() || m.mode == "events" {
+			title := m.panelTitle + " · Esc close · hjkl scroll · Ctrl+R reload"
+			if m.showingLogs() {
+				title = m.panelTitle + " · Esc close · hjkl scroll · c container · p previous · Ctrl+R reload"
+			}
 			body = m.frame(title, m.panel.View(), w, bodyHeight, true)
 			body = lipgloss.NewStyle().Background(m.theme.color("surface")).Foreground(m.theme.color("foreground")).Render(body)
 		} else if d.width > 0 {
@@ -307,6 +316,12 @@ func (m *model) View() tea.View {
 			status = " STALE · " + m.dataErr
 			token = "error"
 		}
+		if m.secretTarget != "" {
+			status = " Secret " + m.secretLabel() + " · " + status
+			if m.dataErr == "" {
+				token = "warning"
+			}
+		}
 		if m.mode == "command" || m.mode == "filter" || m.mode == "log-search" || m.mode == "log-save" {
 			status = m.input.View()
 			token = "foreground"
@@ -319,12 +334,27 @@ func (m *model) View() tea.View {
 		if m.inspectorFocused {
 			help = " j/k scroll  Ctrl+U/D page  g/G ends  Tab/Esc list  ? help  q quit"
 		}
+		if o, ok := m.current(); ok && o.GetKind() == "Secret" && (m.mode == "" || m.mode == "details") {
+			action := "reveal"
+			if m.secretTarget != "" {
+				action = "hide"
+			}
+			help = " x " + action + " values  y YAML  J JSON  Tab inspector  ? help  Esc close"
+			if m.mode == "details" {
+				help = " x " + action + " values  y YAML  J JSON  hjkl scroll  Esc close"
+			} else if m.inspectorFocused {
+				help = " x " + action + " values  y YAML  J JSON  j/k scroll  Tab/Esc list"
+			}
+		}
 		if m.showingLogs() {
 			help = " Space pause  / search  f live/snapshot  o save  c container  p previous  Esc close"
 		}
+		if m.mode == "events" {
+			help = " j/k scroll  Ctrl+U/D page  g/G ends  Ctrl+R reload  Esc close"
+		}
 		lines = append(lines, m.theme.style("muted").Render(fit(help, w)))
 		content = strings.Join(lines, "\n")
-		if m.mode == "picker" || m.mode == "details" || m.mode == "events" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" {
+		if m.mode == "picker" || m.mode == "details" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" {
 			mw, mh := w-4, h-4
 			modal := ""
 			if m.mode == "picker" {

@@ -125,8 +125,13 @@ type model struct {
 	pickerIndex                            int
 	pickerKind                             string
 	panel, inspector                       viewport.Model
+	detailFormat                           string
 	inspectedKey, inspectorContent         string
 	inspectorFocused                       bool
+	secretToken                            uint64
+	secretCancel                           context.CancelFunc
+	secretTarget                           string
+	secretObject                           *unstructured.Unstructured
 	logObject                              unstructured.Unstructured
 	logContainer                           string
 	logPrevious                            bool
@@ -219,6 +224,8 @@ func (m *model) Init() tea.Cmd {
 	return tea.Batch(m.connect(m.contextName), m.themeTimeout())
 }
 func (m *model) close() {
+	m.clearSecret()
+	m.updateInspector()
 	if m.requestCancel != nil {
 		m.requestCancel()
 	}
@@ -361,6 +368,7 @@ func (m *model) navigate(r route, remember bool) tea.Cmd {
 	if m.requestCancel != nil {
 		m.requestCancel()
 	}
+	m.clearSecret()
 	m.closeLog()
 	m.closeEvents()
 	m.request++
@@ -511,12 +519,15 @@ func (m *model) move(n int) {
 }
 func (m *model) updateInspector() {
 	o, ok := m.current()
+	if m.secretTarget != "" && (!ok || o.GetKind() != "Secret" || kube.Identity(o) != m.secretTarget) {
+		m.clearSecret()
+	}
 	content, key := "No resource selected.", ""
 	if ok {
 		key = kube.Identity(o)
 		content = m.describe(o)
 		if m.inspectorFormat == "json" {
-			content = m.theme.renderJSON(kube.Manifest(o, true))
+			content = m.theme.renderJSON(m.manifest(o, true))
 		}
 	}
 	if content != m.inspectorContent {
@@ -527,9 +538,10 @@ func (m *model) updateInspector() {
 		m.inspectedKey = key
 		m.inspector.GotoTop()
 	}
+	m.renderDetails()
 }
 func (m *model) describe(o unstructured.Unstructured) string {
-	return fmt.Sprintf("%s  %s\nNamespace  %s\nStatus     %s\nAge        %s\n\n", kube.Safe(o.GetKind()), kube.Safe(o.GetName()), kube.Safe(o.GetNamespace()), kube.Safe(kube.Status(o)), kube.Age(o)) + m.theme.renderYAML(kube.Manifest(o, false))
+	return fmt.Sprintf("%s  %s\nNamespace  %s\nStatus     %s\nAge        %s\n\n", kube.Safe(o.GetKind()), kube.Safe(o.GetName()), kube.Safe(o.GetNamespace()), kube.Safe(kube.Status(o)), kube.Age(o)) + m.theme.renderYAML(m.manifest(o, false))
 }
 func (m *model) closeLog() {
 	m.logToken++
@@ -614,6 +626,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.route.selection = ""
 			m.rows = make([]unstructured.Unstructured, len(v.rows))
 			for i, o := range v.rows {
+				if m.secretObject != nil && o.GetKind() == "Secret" && kube.Identity(o) == m.secretTarget {
+					m.secretObject = o.DeepCopy()
+				}
 				m.rows[i] = kube.Redacted(o)
 			}
 			m.dataErr = ""
@@ -627,6 +642,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if v.generation == m.generation && v.request == m.request {
 			return m, m.fetch()
 		}
+	case secretReadyMsg:
+		m.secretReady(v)
 	case logsMsg:
 		if v.generation != m.generation || v.token != m.logToken || m.mode != "logs" {
 			return m, nil
@@ -655,9 +672,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case eventsMsg:
 		if v.generation == m.generation && v.token == m.eventToken && m.mode == "events" {
 			if v.err != nil {
-				m.panel.SetContent("Unable to read events: " + kube.Safe(v.err.Error()) + "\n\nCtrl+R retries; Esc closes.")
+				m.panel.SetContent("Unable to read status: " + kube.Safe(v.err.Error()) + "\n\nCtrl+R retries; Esc closes.")
 			} else {
-				m.panel.SetContent(v.content)
+				m.panel.SetContent(m.renderResourceStatus(v.object, v.events, v.eventsError))
 			}
 		}
 	case shellClosedMsg:
