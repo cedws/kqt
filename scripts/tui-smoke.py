@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise ket in a PTY and verify navigation and terminal restoration."""
+"""Exercise kqt in a PTY and verify navigation and terminal restoration."""
 import argparse
 import json
 import shlex
@@ -19,7 +19,7 @@ import time
 from terminal_screen import screen
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--binary', type=Path, default=Path('bin/ket'))
+parser.add_argument('--binary', type=Path, default=Path('bin/kqt'))
 parser.add_argument('--snapshots', type=Path)
 parser.add_argument('--kubeconfig', type=Path, help='Test a disposable live fixture instead of demo')
 args = parser.parse_args()
@@ -77,7 +77,7 @@ def check_restart(config, width, height, env, wrapper):
                 raw.extend(data)
     try:
         expected = 'pods [5]' if args.kubeconfig else 'statefulsets.apps [1]'
-        namespace = 'ket-test' if args.kubeconfig else 'platform'
+        namespace = 'kqt-test' if args.kubeconfig else 'platform'
         deadline=time.monotonic()+20
         while time.monotonic()<deadline:
             pump()
@@ -111,22 +111,22 @@ def check_restart(config, width, height, env, wrapper):
             os.killpg(process.pid,signal.SIGKILL);process.wait()
         os.close(master);os.close(slave)
 
-with tempfile.TemporaryDirectory(prefix='ket-tui-') as directory:
+with tempfile.TemporaryDirectory(prefix='kqt-tui-') as directory:
     config = Path(directory) / 'config.yaml'
     editor = Path(directory) / 'editor-fixture.py'
     editor.write_text(r"""import pathlib,re,sys,time
 path=pathlib.Path(sys.argv[-1])
 text=path.read_text()
 value='tty-'+str(time.monotonic_ns())
-entry='    ket.dev/editor-tested: '+value+'\n'
-if '    ket.dev/editor-tested:' in text:
-    text=re.sub(r'    ket.dev/editor-tested:.*\n',entry,text,count=1)
+entry='    kqt.dev/editor-tested: '+value+'\n'
+if '    kqt.dev/editor-tested:' in text:
+    text=re.sub(r'    kqt.dev/editor-tested:.*\n',entry,text,count=1)
 elif '  annotations:\n' in text:
     text=text.replace('  annotations:\n','  annotations:\n'+entry,1)
 else:
     text=text.replace('metadata:\n','metadata:\n  annotations:\n'+entry,1)
 path.write_text(text)
-print('__KET_EDITOR_STARTED__',flush=True)
+print('__KQT_EDITOR_STARTED__',flush=True)
 """)
     for width, height, layout in [(80, 24, 'classic'), (180, 48, 'inspector'), (80, 40, 'bottom')]:
         editor_command = shlex.quote(sys.executable)+' '+shlex.quote(str(editor))
@@ -134,7 +134,7 @@ print('__KET_EDITOR_STARTED__',flush=True)
         master, slave = os.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', height, width, 0, 0))
         original = termios.tcgetattr(slave)
-        env = dict(os.environ, TERM='xterm-256color', COLORTERM='truecolor', KET_THEME='')
+        env = dict(os.environ, TERM='xterm-256color', COLORTERM='truecolor', KQT_THEME='')
         env.pop('NO_COLOR', None)
         wrapper = '''import subprocess,sys,signal
 child = subprocess.Popen(sys.argv[1:])
@@ -146,7 +146,7 @@ sys.exit(code)
 '''
         launch = [binary, '--config', str(config), '--layout', layout]
         if args.kubeconfig:
-            launch += ['--kubeconfig', str(args.kubeconfig.resolve()), '--namespace', 'ket-test']
+            launch += ['--kubeconfig', str(args.kubeconfig.resolve()), '--namespace', 'kqt-test']
         else:
             launch += ['--demo']
         process = subprocess.Popen([sys.executable, '-c', wrapper, *launch], stdin=slave, stdout=slave, stderr=slave, preexec_fn=setup_child, env=env)
@@ -189,16 +189,16 @@ sys.exit(code)
             expected = 'pods [5]' if args.kubeconfig else 'pods [12]'
             current = expect(expected)
             expect('Explorer')
-            expect('ket-test' if args.kubeconfig else 'web-7c9f6d8b5-0000')
+            expect('kqt-test' if args.kubeconfig else 'web-7c9f6d8b5-0000')
             snapshot('pods')
             assert b'38;2;' in raw or b'38;5;' in raw, 'theme colors absent'
             if args.kubeconfig:
-                send(b'/ket-log-fixture\r'); expect('pods [1]'); send(b'e'); expect('Updated Pod'); send(b'y'); expect('YAML'); expect('ket-log-fixture'); expect('ket.dev/editor-tested'); snapshot('yaml')
+                send(b'/kqt-log-fixture\r'); expect('pods [1]'); send(b'e'); expect('Updated Pod'); send(b'y'); expect('YAML'); expect('kqt-log-fixture'); expect('kqt.dev/editor-tested'); snapshot('yaml')
                 send(b'\x1b'); pump(0.4)
-                send(b'L'); expect('Logs'); expect('ket-live-log-marker'); snapshot('logs')
+                send(b'L'); expect('Logs'); expect('kqt-live-log-marker'); snapshot('logs')
                 send(b'\x1b'); pump(0.4)
-                send(b':deploy\r'); expect('ket-deployment'); send(b'L'); expect('ket-deployment-log-marker'); snapshot('deployment-logs'); send(b'\x1b'); pump(0.4)
-                send(b':sts\r'); expect('ket-stateful'); send(b'L'); expect('ket-stateful-0'); expect('ket-stateful-1'); snapshot('stateful-logs'); send(b'\x1b'); pump(0.4)
+                send(b':deploy\r'); expect('kqt-deployment'); send(b'L'); expect('kqt-deployment-log-marker'); snapshot('deployment-logs'); send(b'\x1b'); pump(0.4)
+                send(b':sts\r'); expect('kqt-stateful'); send(b'L'); expect('kqt-stateful-0'); expect('kqt-stateful-1'); snapshot('stateful-logs'); send(b'\x1b'); pump(0.4)
                 send(b':widgets\r'); expect('live-widget'); expect('Ready')
                 send(b':secrets\r'); expect('fixture-secret')
                 send(b'y'); expect('<redacted>')
@@ -234,7 +234,7 @@ sys.exit(code)
                     send(b'\x1b'); pump(0.4)
             send(b':the\t'); expect(':theme'); send(b'\t'); expect(':themes'); send(b'\x1b'); pump(0.4)
             if not args.kubeconfig:
-                send(b'g'); send(b'e'); expect('Updated Pod'); send(b'y'); expect('ket.dev/editor-tested'); send(b'\x1b'); pump(0.4)
+                send(b'g'); send(b'e'); expect('Updated Pod'); send(b'y'); expect('kqt.dev/editor-tested'); send(b'\x1b'); pump(0.4)
             send(b'J'); expect('JSON'); expect('"apiVersion"'); snapshot('json'); send(b'y'); expect('YAML'); send(b'\x1b'); pump(0.4)
             send(b'tnord'); expect('nord'); send(b'\r'); expect('· nord')
             send(b'?'); expect('Help'); expect('Navigation'); snapshot('help'); send(b'\x1b'); pump(0.4)
@@ -245,7 +245,7 @@ sys.exit(code)
             send(b'q')
             deadline = time.monotonic() + 5
             while b'__EXIT_RC__=0' not in raw and time.monotonic() < deadline: pump()
-            assert b'__EXIT_RC__=0' in raw, 'ket did not exit cleanly'
+            assert b'__EXIT_RC__=0' in raw, 'kqt did not exit cleanly'
             assert b'\x1b[?1049l' in raw, 'alternate screen not restored'
             assert termios.tcgetattr(slave) == original, 'terminal attributes not restored'
             send(b'\n'); process.wait(timeout=5)

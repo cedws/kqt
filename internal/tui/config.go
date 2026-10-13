@@ -89,7 +89,7 @@ func DefaultConfigPath() string {
 		home, _ := os.UserHomeDir()
 		root = filepath.Join(home, ".config")
 	}
-	return filepath.Join(root, "ket", "config.yaml")
+	return filepath.Join(root, "kqt", "config.yaml")
 }
 func defaultConfig() config {
 	return config{Version: 1, Theme: "catppuccin-mocha", Layout: "inspector", View: "pods", InspectorFormat: "yaml", Refresh: "2s", Views: map[string]viewConfig{}, Layouts: map[string]layoutProfile{}, Contexts: map[string]contextState{}}

@@ -8,9 +8,9 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/z0mbix/kqt/internal/kube"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"ket/internal/kube"
 )
 
 type eventsMsg struct {

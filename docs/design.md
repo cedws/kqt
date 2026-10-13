@@ -1,6 +1,6 @@
-# ket: The Kubernetes Exploration Tool
+# kqt: A Kubernetes Query Tool
 
-ket carries Maestro's visual language into a Kubernetes explorer: compact
+kqt carries Maestro's visual language into a Kubernetes explorer: compact
 context header, framed tables, contextual footer, command prompt, fuzzy pickers,
 independently scrollable inspector, and the same semantic palettes.
 
@@ -44,7 +44,7 @@ References: [k9s](https://k9scli.io/),
 
 ## Preferences and layouts
 
-`~/.config/ket/config.yaml` (or XDG/explicit path) stores current view/namespace,
+`~/.config/kqt/config.yaml` (or XDG/explicit path) stores current view/namespace,
 per-context state, theme, inspector format, editor, columns, and named layouts.
 Explicit launch flags take precedence. Default TOML settings are migrated on
 first save while leaving their source unchanged; custom palettes remain TOML.

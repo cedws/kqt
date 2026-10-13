@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/z0mbix/kqt/internal/kube"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"ket/internal/kube"
 	"sigs.k8s.io/yaml"
 )
 
@@ -16,7 +16,7 @@ func TestEditorCommandArguments(t *testing.T) {
 	for _, tc := range []struct {
 		command string
 		want    []string
-	}{{`code --wait`, []string{"code", "--wait"}}, {`"/Applications/My Editor/editor" --title 'ket resource'`, []string{"/Applications/My Editor/editor", "--title", "ket resource"}}, {`editor --literal '$(echo nope)'`, []string{"editor", "--literal", "$(echo nope)"}}, {`editor --empty ""`, []string{"editor", "--empty", ""}}} {
+	}{{`code --wait`, []string{"code", "--wait"}}, {`"/Applications/My Editor/editor" --title 'kqt resource'`, []string{"/Applications/My Editor/editor", "--title", "kqt resource"}}, {`editor --literal '$(echo nope)'`, []string{"editor", "--literal", "$(echo nope)"}}, {`editor --empty ""`, []string{"editor", "--empty", ""}}} {
 		got, err := editorArgs(tc.command)
 		if err != nil || !reflect.DeepEqual(got, tc.want) {
 			t.Fatalf("%q: %v %v", tc.command, got, err)
@@ -70,14 +70,14 @@ func TestEditorNoChangeAndMinimalVersionedPatch(t *testing.T) {
 		t.Fatalf("unchanged edit applied: %v %v", changed, err)
 	}
 	edited := *buffer.editable.DeepCopy()
-	edited.SetAnnotations(map[string]string{"ket.dev/edited": "yes"})
+	edited.SetAnnotations(map[string]string{"kqt.dev/edited": "yes"})
 	writeEdit(t, buffer, edited)
 	changed, err = buffer.apply(context.Background())
 	if !changed || err != nil {
 		t.Fatalf("edit failed: %v", err)
 	}
 	updated, err := demo.Get(context.Background(), buffer.resource, "default", buffer.original.GetName())
-	if err != nil || updated.GetAnnotations()["ket.dev/edited"] != "yes" || updated.GetResourceVersion() == buffer.original.GetResourceVersion() {
+	if err != nil || updated.GetAnnotations()["kqt.dev/edited"] != "yes" || updated.GetResourceVersion() == buffer.original.GetResourceVersion() {
 		t.Fatal("patch not applied")
 	}
 	if kube.Status(updated) != kube.Status(buffer.original) || len(kube.Containers(updated)) != len(kube.Containers(buffer.original)) {

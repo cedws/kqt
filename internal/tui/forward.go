@@ -9,7 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"ket/internal/kube"
+	"github.com/z0mbix/kqt/internal/kube"
 )
 
 type forwardSession struct {

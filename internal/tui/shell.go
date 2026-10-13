@@ -13,9 +13,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/term"
 	"github.com/muesli/cancelreader"
+	"github.com/z0mbix/kqt/internal/kube"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/tools/remotecommand"
-	"ket/internal/kube"
 )
 
 type terminalSizes struct {
@@ -250,7 +250,7 @@ func (m *model) runShell() tea.Cmd {
 	m.shellCancel = cancel
 	m.mode = "shell"
 	g, token := m.generation, m.shellToken
-	adapter := &shellCommand{ctx: ctx, executor: m.backend.(kube.PodExecutor), target: m.shellObject, container: m.shellContainer, command: args, heading: "ket shell · " + kube.Safe(m.contextName) + " · " + kube.Safe(m.shellObject.GetNamespace()+"/"+m.shellObject.GetName()+":"+m.shellContainer)}
+	adapter := &shellCommand{ctx: ctx, executor: m.backend.(kube.PodExecutor), target: m.shellObject, container: m.shellContainer, command: args, heading: "kqt shell · " + kube.Safe(m.contextName) + " · " + kube.Safe(m.shellObject.GetNamespace()+"/"+m.shellObject.GetName()+":"+m.shellContainer)}
 	return tea.Exec(adapter, func(err error) tea.Msg { return shellClosedMsg{g, token, err} })
 }
 func (m *model) shellClosed(v shellClosedMsg) tea.Cmd {

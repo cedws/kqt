@@ -8,10 +8,10 @@ import (
 
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
+	"github.com/z0mbix/kqt/internal/kube"
+	"github.com/z0mbix/kqt/internal/tui"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"ket/internal/kube"
-	"ket/internal/tui"
 )
 
 var version = "0.1.0-dev"
@@ -19,17 +19,17 @@ var version = "0.1.0-dev"
 func command() *cobra.Command {
 	var o tui.Options
 	var kubeconfig, config, theme, layout string
-	cmd := &cobra.Command{Use: "ket", Short: "The Kubernetes Exploration Tool", Long: "Explore Kubernetes with Maestro's terminal layout and themes. Press : for commands, / to filter, n for namespaces, ? for help, and q to quit.", Version: version, SilenceUsage: true, SilenceErrors: true, Args: cobra.NoArgs}
+	cmd := &cobra.Command{Use: "kqt", Short: "A Kubernetes Query Tool", Long: "Explore Kubernetes with Maestro's terminal layout and themes. Press : for commands, / to filter, n for namespaces, ? for help, and q to quit.", Version: version, SilenceUsage: true, SilenceErrors: true, Args: cobra.NoArgs}
 	f := cmd.PersistentFlags()
 	f.StringVar(&kubeconfig, "kubeconfig", "", "Kubeconfig file (default: KUBECONFIG or ~/.kube/config)")
-	f.StringVar(&config, "config", "", "UI configuration (default: ~/.config/ket/config.yaml)")
+	f.StringVar(&config, "config", "", "UI configuration (default: ~/.config/kqt/config.yaml)")
 	f.StringVar(&o.Context, "context", "", "Kubeconfig context for this session")
 	f.StringVarP(&o.Namespace, "namespace", "n", "", "Namespace (default: context namespace)")
 	f.BoolVarP(&o.AllNamespaces, "all-namespaces", "A", false, "Browse all namespaces")
 	f.StringVar(&o.View, "view", "", "Initial resource name, kind, or alias (default: saved view)")
 	f.StringVarP(&o.Labels, "selector", "l", "", "Kubernetes label selector")
 	f.StringVar(&theme, "theme", "", "Terminal color theme")
-	f.StringVar(&layout, "layout", "", "Saved layout name (ket config shows an example)")
+	f.StringVar(&layout, "layout", "", "Saved layout name (kqt config shows an example)")
 	f.BoolVar(&o.Demo, "demo", false, "Explore an offline sample cluster")
 	cmd.MarkFlagsMutuallyExclusive("namespace", "all-namespaces")
 	settings := func() (*tui.Settings, error) {
@@ -38,10 +38,10 @@ func command() *cobra.Command {
 			return nil, err
 		}
 		if theme == "" {
-			theme = os.Getenv("KET_THEME")
+			theme = os.Getenv("KQT_THEME")
 		}
 		if theme != "" && !s.SelectTheme(theme) {
-			return nil, fmt.Errorf("unknown theme %q; run ket themes", theme)
+			return nil, fmt.Errorf("unknown theme %q; run kqt themes", theme)
 		}
 		if layout != "" && !s.SelectLayout(layout) {
 			return nil, fmt.Errorf("unknown layout %q", layout)
@@ -61,7 +61,7 @@ func command() *cobra.Command {
 			return fmt.Errorf("invalid label selector: %w", err)
 		}
 		if !term.IsTerminal(os.Stdin.Fd()) || !term.IsTerminal(os.Stdout.Fd()) {
-			return fmt.Errorf("ket requires an interactive terminal; try ket --demo in a terminal, or ket --help")
+			return fmt.Errorf("kqt requires an interactive terminal; try kqt --demo in a terminal, or kqt --help")
 		}
 		var l *kube.Loader
 		if !o.Demo {
@@ -99,7 +99,7 @@ func command() *cobra.Command {
 }
 func main() {
 	if err := command().ExecuteContext(context.Background()); err != nil {
-		fmt.Fprintln(os.Stderr, "ket:", err)
+		fmt.Fprintln(os.Stderr, "kqt:", err)
 		os.Exit(1)
 	}
 }

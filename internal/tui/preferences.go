@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 
 	"github.com/pelletier/go-toml/v2"
+	"github.com/z0mbix/kqt/internal/kube"
 	yaml "go.yaml.in/yaml/v3"
-	"ket/internal/kube"
 )
 
 // Merge only changed preferences into the latest file. YAML nodes preserve
-// comments and unrelated settings edited while ket is open.
+// comments and unrelated settings edited while kqt is open.
 func (s *Settings) savePatch(patch map[string]any) error {
 	path := s.Path
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
@@ -92,7 +92,7 @@ func (s *Settings) savePatch(patch map[string]any) error {
 	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
-	file, err := os.CreateTemp(filepath.Dir(path), ".ket-config-*")
+	file, err := os.CreateTemp(filepath.Dir(path), ".kqt-config-*")
 	if err != nil {
 		return err
 	}

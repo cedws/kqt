@@ -25,24 +25,24 @@ wrapper forwards context and relevant authentication flags and displays a target
 banner. See
 [the execution wrapper](https://github.com/derailed/k9s/blob/8f29fba8c97d70008617ed63032f2ef508602c99/internal/view/exec.go).
 
-## Options for ket
+## Options for kqt
 
 | Approach | Complexity | Product effect |
 | --- | --- | --- |
-| Follow k9s: optional `kubectl exec -it` subprocess | Lowest; reuse ket's tested editor terminal handoff, container picker, argument construction, and refresh pause/resume | Shells require kubectl. Browsing/editing still work without it. Must pin the selected context and configuration rather than rereading an unrelated CLI default. |
-| Use client-go `remotecommand` through Bubble Tea `Exec` | More terminal/streaming work, still a contained addition | Keeps ket standalone and uses the current authenticated session configuration. Need raw mode, resize delivery, cancellation, protocol fallback, and terminal restoration tests. |
+| Follow k9s: optional `kubectl exec -it` subprocess | Lowest; reuse kqt's tested editor terminal handoff, container picker, argument construction, and refresh pause/resume | Shells require kubectl. Browsing/editing still work without it. Must pin the selected context and configuration rather than rereading an unrelated CLI default. |
+| Use client-go `remotecommand` through Bubble Tea `Exec` | More terminal/streaming work, still a contained addition | Keeps kqt standalone and uses the current authenticated session configuration. Need raw mode, resize delivery, cancellation, protocol fallback, and terminal restoration tests. |
 | Embed a terminal inside an inspector | Considerably larger | Introduces terminal emulation/rendering/input concerns that this request does not need. |
 
 client-go already supplies TTY-capable shell streams, context cancellation,
 WebSocket and SPDY executors, fallback, and a terminal-size queue.
 [Official remotecommand API](https://pkg.go.dev/k8s.io/client-go@v0.36.0/tools/remotecommand).
-The pinned local v0.36.0 source includes these APIs. ket already uses Bubble Tea's
+The pinned local v0.36.0 source includes these APIs. kqt already uses Bubble Tea's
 external-I/O terminal lifecycle for editing, and x/term already provides raw-mode,
 restoration, and terminal dimensions. An embedded terminal is unnecessary.
 
 ## Selected implementation
 
-ket uses **client-go remotecommand with a native terminal handoff**. That preserves
+kqt uses **client-go remotecommand with a native terminal handoff**. That preserves
 the no-kubectl runtime requirement and the authenticated session/target contract.
 The addition consists of an exec backend, terminal/input adapters, and a running
 container picker. The current default command is `/bin/sh`, configurable through

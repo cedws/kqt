@@ -89,7 +89,7 @@ func FollowWorkload(ctx context.Context, b Backend, target unstructured.Unstruct
 							message = getErr.Error()
 						}
 						if lastError != message {
-							send("[ket] " + message)
+							send("[kqt] " + message)
 							lastError = message
 						}
 						return
@@ -128,7 +128,7 @@ func FollowWorkload(ctx context.Context, b Backend, target unstructured.Unstruct
 		}
 		if err != nil {
 			if lastError != err.Error() {
-				send("[ket] Unable to discover log sources: " + err.Error())
+				send("[kqt] Unable to discover log sources: " + err.Error())
 				lastError = err.Error()
 			}
 			if target.GetKind() == "Pod" {
@@ -183,7 +183,7 @@ func FollowWorkload(ctx context.Context, b Backend, target unstructured.Unstruct
 			go func() { defer workers.Done(); followSource(child, b, stream, source, send) }()
 		}
 		if limited && !limitedBefore {
-			send("[ket] Live logs limited to 64 containers; narrow the workload or choose a container.")
+			send("[kqt] Live logs limited to 64 containers; narrow the workload or choose a container.")
 		}
 		limitedBefore = limited
 	}

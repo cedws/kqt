@@ -39,23 +39,24 @@ jobs:
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
             version="$GITHUB_REF_NAME"
           fi
-          package="ket-${GOOS}-${GOARCH}"
+          package="kqt-${GOOS}-${GOARCH}"
           directory="artifacts/$package"
-          mkdir -p "$directory/internal/tui/licenses"
-          go build -trimpath -ldflags "-s -w -X main.version=$version" -o "$directory/ket" ./cmd/ket
+          mkdir -p "$directory/internal/tui/licenses" "$directory/docs/screenshots"
+          go build -trimpath -ldflags "-s -w -X main.version=$version" -o "$directory/kqt" ./cmd/kqt
           cp README.md "$directory/README.md"
           cp internal/tui/THEMES.md "$directory/internal/tui/THEMES.md"
           cp internal/tui/licenses/*.txt "$directory/internal/tui/licenses/"
+          cp docs/screenshots/*.png "$directory/docs/screenshots/"
           tar -C artifacts -czf "artifacts/$package.tar.gz" "$package"
           cd artifacts
           sha256sum "$package.tar.gz" > "$package.tar.gz.sha256"
       - name: Upload binary archive and checksum
         uses: actions/upload-artifact@v7
         with:
-          name: ket-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: kqt-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
-            artifacts/ket-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
-            artifacts/ket-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz.sha256
+            artifacts/kqt-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+            artifacts/kqt-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz.sha256
           if-no-files-found: error
           compression-level: 0
           retention-days: 30

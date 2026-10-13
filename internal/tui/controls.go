@@ -7,9 +7,9 @@ import (
 
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"github.com/z0mbix/kqt/internal/kube"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"ket/internal/kube"
 )
 
 func scroll(v *viewport.Model, key string) bool {
@@ -701,7 +701,7 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-const helpText = `ket · The Kubernetes Exploration Tool
+const helpText = `kqt · A Kubernetes Query Tool
 
 Navigation
   j/k, arrows        Move through resources
@@ -751,7 +751,7 @@ Refresh and exit
   ? / :help          This help
   q / :q / Ctrl+C    Quit
 
-View and namespace are saved per context in ~/.config/ket/config.yaml.
+View and namespace are saved per context in ~/.config/kqt/config.yaml.
 Themes, layouts and inspector format are saved when applied.
 The theme name is shown for ten seconds after selection.
 Kubeconfig is never modified. Secret values are redacted in UI views.

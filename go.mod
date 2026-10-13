@@ -1,4 +1,4 @@
-module ket
+module github.com/z0mbix/kqt
 
 go 1.27.1
 

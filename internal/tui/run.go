@@ -5,7 +5,7 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
-	"ket/internal/kube"
+	"github.com/z0mbix/kqt/internal/kube"
 )
 
 func Run(ctx context.Context, s *Settings, o Options, l *kube.Loader, in, out *os.File) error {

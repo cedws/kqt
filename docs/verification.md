@@ -2,7 +2,7 @@
 
 Verified locally on 2026-10-12 with Go 1.27.1 on macOS arm64.
 
-- Native build passed; the executable is `bin/ket`.
+- Native build passed; the executable is `bin/kqt`.
 - `go test -race ./...` and `go vet ./...` passed.
 - A Linux amd64 build with CGO disabled passed.
 - Offline help, version, theme listing, example configuration, and validation
@@ -99,7 +99,7 @@ The existing three-layout PTY checks and saved-state restart checks passed again
 the live fixture. `scripts/operator-smoke.py` passed in demo and live modes at
 80x24. The live shell was resized to 132x36 and its remote terminal reported that
 size; Ctrl+C interrupted a remote sleep, a subsequent command ran, normal exit
-and Ctrl+] returned to ket, and a missing shell produced a recoverable error.
+and Ctrl+] returned to kqt, and a missing shell produced a recoverable error.
 Log pause/search/export, live/snapshot switching, scoped events, metrics columns,
 forward inspection/stop, and automatic forwarding cleanup on quit all passed.
 Terminal attributes matched their original values on exit. All disposable

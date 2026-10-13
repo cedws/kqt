@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
-	"ket/internal/kube"
+	"github.com/z0mbix/kqt/internal/kube"
 )
 
 const logBufferBytes = 4 * 1024 * 1024
@@ -116,7 +116,7 @@ func (m *model) logTitle() {
 func (m *model) logContent() string {
 	var lines []string
 	if m.logDropped > 0 {
-		lines = append(lines, fmt.Sprintf("[ket] %d older lines discarded (4 MiB / 10,000 line buffer)", m.logDropped))
+		lines = append(lines, fmt.Sprintf("[kqt] %d older lines discarded (4 MiB / 10,000 line buffer)", m.logDropped))
 	}
 	for _, line := range m.logLines {
 		if strings.Contains(strings.ToLower(line), strings.ToLower(m.logSearch)) {
@@ -156,7 +156,7 @@ func (m *model) logPulse(v logPulseMsg) tea.Cmd {
 	}
 	m.logDone = done
 	if err != nil && m.session.ctx.Err() == nil {
-		m.logLines = append(m.logLines, "[ket] Live logs ended: "+kube.Safe(err.Error()))
+		m.logLines = append(m.logLines, "[kqt] Live logs ended: "+kube.Safe(err.Error()))
 	}
 	if !m.logPaused {
 		m.renderLogs()
@@ -173,7 +173,7 @@ func (m *model) logsInput(mode string) tea.Cmd {
 	m.input.Prompt = "/ "
 	value := m.logSearch
 	if mode == "log-save" {
-		value = "ket-logs.log"
+		value = "kqt-logs.log"
 		m.input.Prompt = "Save to: "
 	}
 	m.input.SetValue(value)

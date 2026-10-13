@@ -6,7 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"ket/internal/kube"
+	"github.com/z0mbix/kqt/internal/kube"
 )
 
 func TestYAMLHighlightingPreservesTextAcrossThemes(t *testing.T) {

@@ -90,7 +90,7 @@ func TestConfigUpdatesPreserveExternalSettingsAndComments(t *testing.T) {
 func TestLegacyConfigMigratesWithoutChangingOriginal(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", root)
-	dir := filepath.Join(root, "ket")
+	dir := filepath.Join(root, "kqt")
 	os.MkdirAll(dir, 0700)
 	legacy := filepath.Join(dir, "config.toml")
 	source := "version=1\ntheme='nord'\nlayout='classic'\nview='nodes'\nnamespace='apps'\neditor='nvim -f'\n"

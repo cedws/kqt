@@ -1,8 +1,8 @@
-apiVersion: exploration.ket.dev/v1
+apiVersion: exploration.kqt.dev/v1
 kind: Widget
 metadata:
   name: live-widget
-  namespace: ket-test
+  namespace: kqt-test
 spec:
   description: Real Kubernetes discovery fixture
 status:

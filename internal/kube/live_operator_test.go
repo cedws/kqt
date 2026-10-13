@@ -25,7 +25,7 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestLiveOperator(t *testing.T) {
-	path := os.Getenv("KET_LIVE_KUBECONFIG")
+	path := os.Getenv("KQT_LIVE_KUBECONFIG")
 	if path == "" {
 		t.Skip("disposable Kubernetes fixture only")
 	}
@@ -33,8 +33,8 @@ func TestLiveOperator(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(loader.Current(), "k3d-ket-smoke-") {
-		t.Fatal("live qualification requires a disposable ket-smoke cluster")
+	if !strings.HasPrefix(loader.Current(), "k3d-kqt-smoke-") {
+		t.Fatal("live qualification requires a disposable kqt-smoke cluster")
 	}
 	backend, _, _, err := loader.Open(loader.Current())
 	if err != nil {
@@ -45,17 +45,17 @@ func TestLiveOperator(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	resource, _ := Resolve(Builtins(), "pods")
-	pod, err := client.Get(ctx, resource, "ket-test", "ket-log-fixture")
+	pod, err := client.Get(ctx, resource, "kqt-test", "kqt-log-fixture")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Run("events-and-metrics", func(t *testing.T) {
 		text, err := ResourceEvents(ctx, client, pod)
-		if err != nil || !strings.Contains(text, "ket-event-marker") {
+		if err != nil || !strings.Contains(text, "kqt-event-marker") {
 			t.Fatalf("events not scoped to fixture: %s %v", text, err)
 		}
 		waitLive(t, 60*time.Second, func() bool {
-			usage, err := client.Metrics(ctx, "Pod", "ket-test")
+			usage, err := client.Metrics(ctx, "Pod", "kqt-test")
 			_, present := usage[UsageKey(pod)]
 			return err == nil && present
 		})
@@ -86,15 +86,15 @@ func TestLiveOperator(t *testing.T) {
 			}
 			defer operator.Close()
 			var stdout, stderr bytes.Buffer
-			err = operator.Exec(ctx, pod, "fixture", []string{"/bin/sh", "-c", "printf ket-exec-marker"}, remotecommand.StreamOptions{Stdout: &stdout, Stderr: &stderr})
-			if err != nil || stdout.String() != "ket-exec-marker" {
+			err = operator.Exec(ctx, pod, "fixture", []string{"/bin/sh", "-c", "printf kqt-exec-marker"}, remotecommand.StreamOptions{Stdout: &stdout, Stderr: &stderr})
+			if err != nil || stdout.String() != "kqt-exec-marker" {
 				t.Fatalf("exec failed: %q %s %v", stdout.String(), stderr.String(), err)
 			}
-			if err = operator.Exec(ctx, pod, "fixture", []string{"/ket-missing-shell"}, remotecommand.StreamOptions{Stdout: io.Discard, Stderr: io.Discard}); err == nil {
+			if err = operator.Exec(ctx, pod, "fixture", []string{"/kqt-missing-shell"}, remotecommand.StreamOptions{Stdout: io.Discard, Stderr: io.Discard}); err == nil {
 				t.Fatal("missing shell reported success")
 			}
 			serviceResource, _ := Resolve(Builtins(), "services")
-			service, err := client.Get(ctx, serviceResource, "ket-test", "ket-http")
+			service, err := client.Get(ctx, serviceResource, "kqt-test", "kqt-http")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -125,7 +125,7 @@ func TestLiveOperator(t *testing.T) {
 			}
 			content, err := io.ReadAll(response.Body)
 			response.Body.Close()
-			if err != nil || !strings.Contains(string(content), "ket-forward-marker") {
+			if err != nil || !strings.Contains(string(content), "kqt-forward-marker") {
 				t.Fatalf("forwarded wrong traffic: %q %v", content, err)
 			}
 			stop()
@@ -145,7 +145,7 @@ func TestLiveOperator(t *testing.T) {
 	}
 	t.Run("rbac-denial", func(t *testing.T) {
 		lifetime := int64(600)
-		token, err := client.core.ServiceAccounts("ket-test").CreateToken(ctx, "ket-reader", &authenticationv1.TokenRequest{Spec: authenticationv1.TokenRequestSpec{ExpirationSeconds: &lifetime}}, metav1.CreateOptions{})
+		token, err := client.core.ServiceAccounts("kqt-test").CreateToken(ctx, "kqt-reader", &authenticationv1.TokenRequest{Spec: authenticationv1.TokenRequestSpec{ExpirationSeconds: &lifetime}}, metav1.CreateOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -176,7 +176,7 @@ func TestLiveOperator(t *testing.T) {
 	})
 	t.Run("workload-live-logs", func(t *testing.T) {
 		deployResource, _ := Resolve(Builtins(), "deployments")
-		deployment, err := client.Get(ctx, deployResource, "ket-test", "ket-deployment")
+		deployment, err := client.Get(ctx, deployResource, "kqt-test", "kqt-deployment")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -193,7 +193,7 @@ func TestLiveOperator(t *testing.T) {
 			})
 		}()
 		podResource, _ := Resolve(Builtins(), "pods")
-		query := Query{Resource: podResource, Namespace: "ket-test", Labels: "app=ket-deployment"}
+		query := Query{Resource: podResource, Namespace: "kqt-test", Labels: "app=kqt-deployment"}
 		before, err := client.List(ctx, query)
 		if err != nil {
 			t.Fatal(err)
@@ -205,12 +205,12 @@ func TestLiveOperator(t *testing.T) {
 		scale := func(replicas int64) {
 			t.Helper()
 			for attempt := 0; attempt < 5; attempt++ {
-				fresh, err := client.Get(ctx, deployResource, "ket-test", "ket-deployment")
+				fresh, err := client.Get(ctx, deployResource, "kqt-test", "kqt-deployment")
 				if err != nil {
 					t.Fatal(err)
 				}
 				patch, _ := json.Marshal(map[string]interface{}{"metadata": map[string]interface{}{"uid": fresh.GetUID(), "resourceVersion": fresh.GetResourceVersion()}, "spec": map[string]interface{}{"replicas": replicas}})
-				if client.Patch(ctx, deployResource, "ket-test", "ket-deployment", patch) == nil {
+				if client.Patch(ctx, deployResource, "kqt-test", "kqt-deployment", patch) == nil {
 					return
 				}
 				time.Sleep(100 * time.Millisecond)
@@ -227,8 +227,8 @@ func TestLiveOperator(t *testing.T) {
 				select {
 				case line := <-lines:
 					for _, word := range strings.Fields(line) {
-						if strings.Contains(word, "ket-deployment-log-marker-") {
-							name := strings.TrimPrefix(word, "ket-deployment-log-marker-")
+						if strings.Contains(word, "kqt-deployment-log-marker-") {
+							name := strings.TrimPrefix(word, "kqt-deployment-log-marker-")
 							if !known[name] {
 								return true
 							}

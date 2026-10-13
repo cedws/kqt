@@ -8,7 +8,7 @@ import (
 
 	"github.com/goccy/go-yaml/lexer"
 	"github.com/goccy/go-yaml/token"
-	"ket/internal/kube"
+	"github.com/z0mbix/kqt/internal/kube"
 )
 
 // Highlight the original serialized YAML rather than reformatting parsed

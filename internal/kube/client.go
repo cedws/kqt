@@ -48,7 +48,7 @@ func Load(path string) (*Loader, error) {
 		return nil, fmt.Errorf("load kubeconfig: %w", err)
 	}
 	if len(raw.Contexts) == 0 {
-		return nil, fmt.Errorf("no Kubernetes contexts configured; configure kubeconfig or try ket --demo")
+		return nil, fmt.Errorf("no Kubernetes contexts configured; configure kubeconfig or try kqt --demo")
 	}
 	return &Loader{raw}, nil
 }
@@ -77,7 +77,7 @@ func (l *Loader) Open(name string) (Backend, string, string, error) {
 	if err != nil {
 		return nil, "", "", err
 	}
-	cfg.UserAgent = "ket/0.1.0"
+	cfg.UserAgent = "kqt/0.1.0"
 	cfg.Timeout = 12 * time.Second
 	ns, _, err := config.Namespace()
 	if err != nil {
@@ -222,6 +222,6 @@ func (c *Client) Get(ctx context.Context, r Resource, namespace, name string) (u
 	return *o, nil
 }
 func (c *Client) Patch(ctx context.Context, r Resource, namespace, name string, patch []byte) error {
-	_, err := c.resource(r, namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{FieldManager: "ket-editor"})
+	_, err := c.resource(r, namespace).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{FieldManager: "kqt-editor"})
 	return err
 }

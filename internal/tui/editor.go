@@ -14,10 +14,10 @@ import (
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/z0mbix/kqt/internal/kube"
 	yamlv3 "go.yaml.in/yaml/v3"
 	jsonpatch "gopkg.in/evanphx/json-patch.v4"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"ket/internal/kube"
 	"sigs.k8s.io/yaml"
 )
 
@@ -121,7 +121,7 @@ func newEditBuffer(original unstructured.Unstructured, r kube.Resource, b kube.E
 	if err != nil {
 		return nil, err
 	}
-	directory, err := os.MkdirTemp("", "ket-edit-")
+	directory, err := os.MkdirTemp("", "kqt-edit-")
 	if err != nil {
 		return nil, err
 	}

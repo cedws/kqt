@@ -1,25 +1,25 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: ket-test
+  name: kqt-test
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: default
-  namespace: ket-test
+  namespace: kqt-test
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: ket-reader
-  namespace: ket-test
+  name: kqt-reader
+  namespace: kqt-test
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: ket-reader
-  namespace: ket-test
+  name: kqt-reader
+  namespace: kqt-test
 rules:
   - apiGroups: [""]
     resources: [pods]
@@ -28,30 +28,30 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: ket-reader
-  namespace: ket-test
+  name: kqt-reader
+  namespace: kqt-test
 subjects:
   - kind: ServiceAccount
-    name: ket-reader
-    namespace: ket-test
+    name: kqt-reader
+    namespace: kqt-test
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: ket-reader
+  name: kqt-reader
 ---
 apiVersion: v1
 kind: Pod
 metadata:
-  name: ket-log-fixture
-  namespace: ket-test
+  name: kqt-log-fixture
+  namespace: kqt-test
   labels:
-    app: ket-fixture
+    app: kqt-fixture
 spec:
   terminationGracePeriodSeconds: 1
   containers:
     - name: fixture
       image: busybox:1.37
-      command: ["sh", "-c", "mkdir -p /www; echo ket-forward-marker > /www/index.html; httpd -p 8080 -h /www; while true; do echo ket-live-log-marker; sleep 1; done"]
+      command: ["sh", "-c", "mkdir -p /www; echo kqt-forward-marker > /www/index.html; httpd -p 8080 -h /www; while true; do echo kqt-live-log-marker; sleep 1; done"]
       ports:
         - name: fixture-http
           containerPort: 8080
@@ -59,11 +59,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: ket-http
-  namespace: ket-test
+  name: kqt-http
+  namespace: kqt-test
 spec:
   selector:
-    app: ket-fixture
+    app: kqt-fixture
   ports:
     - port: 80
       targetPort: fixture-http
@@ -72,16 +72,16 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: fixture-secret
-  namespace: ket-test
+  namespace: kqt-test
 stringData:
   token: LIVE_SECRET_MUST_NOT_APPEAR
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: widgets.exploration.ket.dev
+  name: widgets.exploration.kqt.dev
 spec:
-  group: exploration.ket.dev
+  group: exploration.kqt.dev
   scope: Namespaced
   names:
     plural: widgets
@@ -110,23 +110,23 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ket-deployment
-  namespace: ket-test
+  name: kqt-deployment
+  namespace: kqt-test
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: ket-deployment
+      app: kqt-deployment
   template:
     metadata:
       labels:
-        app: ket-deployment
+        app: kqt-deployment
     spec:
       terminationGracePeriodSeconds: 1
       containers:
         - name: fixture
           image: busybox:1.37
-          command: ["sh", "-c", "while true; do echo ket-deployment-log-marker-$POD_NAME; sleep 1; done"]
+          command: ["sh", "-c", "while true; do echo kqt-deployment-log-marker-$POD_NAME; sleep 1; done"]
           env:
             - name: POD_NAME
               valueFrom:
@@ -136,36 +136,36 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: ket-stateful-headless
-  namespace: ket-test
+  name: kqt-stateful-headless
+  namespace: kqt-test
 spec:
   clusterIP: None
   selector:
-    app: ket-stateful
+    app: kqt-stateful
   ports:
     - port: 80
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: ket-stateful
-  namespace: ket-test
+  name: kqt-stateful
+  namespace: kqt-test
 spec:
   replicas: 2
-  serviceName: ket-stateful-headless
+  serviceName: kqt-stateful-headless
   selector:
     matchLabels:
-      app: ket-stateful
+      app: kqt-stateful
   template:
     metadata:
       labels:
-        app: ket-stateful
+        app: kqt-stateful
     spec:
       terminationGracePeriodSeconds: 1
       containers:
         - name: fixture
           image: busybox:1.37
-          command: ["sh", "-c", "while true; do echo ket-stateful-log-marker-$POD_NAME; sleep 1; done"]
+          command: ["sh", "-c", "while true; do echo kqt-stateful-log-marker-$POD_NAME; sleep 1; done"]
           env:
             - name: POD_NAME
               valueFrom:

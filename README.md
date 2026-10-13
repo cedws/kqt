@@ -1,11 +1,13 @@
-# ket
+# kqt
 
-**The Kubernetes Exploration Tool** — a keyboard-first Kubernetes browser with
+**A Kubernetes Query Tool** — a keyboard-first Kubernetes browser with
 Maestro's terminal layout, themes, and Go UI libraries.
 
-Inspired by [k9s](https://k9scli.io/), ket uses Bubble Tea v2, Bubbles v2, Lip Gloss
+Inspired by [k9s](https://k9scli.io/), kqt uses Bubble Tea v2, Bubbles v2, Lip Gloss
 v2, and the official Kubernetes client-go. It talks directly to Kubernetes;
 kubectl is not required at runtime.
+
+![kqt resource explorer with highlighted YAML](docs/screenshots/explorer.png)
 
 ## Run
 
@@ -15,7 +17,7 @@ With mise activated in your shell, the repository's mise configuration adds
 `kqt`.
 
 ```sh
-go build -trimpath -o bin/kqt ./cmd/ket
+go build -trimpath -o bin/kqt ./cmd/kqt
 kqt --demo                      # Offline sample cluster
 kqt                             # Current context and saved view / namespace
 kqt -A                          # Override saved scope: all namespaces
@@ -23,8 +25,7 @@ kqt --context staging -n apps --theme nord
 kqt --view deploy --layout classic -l app=web
 ```
 
-With mise and just, use `just demo` for the sample cluster and `just check` for
-tests.
+With mise and just, use `just build`, `just demo`, and `just check`.
 
 ## Binary builds
 
@@ -34,14 +35,14 @@ run's **Artifacts** section:
 
 | Platform | Artifact |
 | --- | --- |
-| macOS Intel | `ket-darwin-amd64` |
-| macOS Apple Silicon | `ket-darwin-arm64` |
-| Linux x86-64 | `ket-linux-amd64` |
-| Linux ARM64 | `ket-linux-arm64` |
+| macOS Intel | `kqt-darwin-amd64` |
+| macOS Apple Silicon | `kqt-darwin-arm64` |
+| Linux x86-64 | `kqt-linux-amd64` |
+| Linux ARM64 | `kqt-linux-arm64` |
 
 Each artifact contains a `.tar.gz` archive and its `.sha256` checksum file. The
 archive includes the executable, README, and theme license notices. Extract it
-and run the `ket` executable inside, or copy it onto your PATH. Artifacts are kept
+and run the `kqt` executable inside, or copy it onto your PATH. Artifacts are kept
 for 30 days. These are workflow downloads; releases are not published automatically.
 Tag builds report the tag as their version; other builds report `dev-<commit>`.
 All four targets are cross-compiled on Linux with CGO disabled.
@@ -50,7 +51,7 @@ All four targets are cross-compiled on Linux with CGO disabled.
 
 `--kubeconfig` selects one kubeconfig file. Otherwise Kubernetes's normal
 `KUBECONFIG` merging or `~/.kube/config` loading applies. `--context` overrides
-current-context for this session; ket never rewrites kubeconfig. Exec credential
+current-context for this session; kqt never rewrites kubeconfig. Exec credential
 plugins and OIDC are supported by client-go. Without a current context, a context
 picker opens. UI preferences never silently select a different Kubernetes context.
 
@@ -111,7 +112,7 @@ these views. Highlighting preserves displayed text, quoting, and spacing.
 
 ## Logs
 
-Select a pod, deployment, or statefulset and press `L`. For a workload, ket reads
+Select a pod, deployment, or statefulset and press `L`. For a workload, kqt reads
 all pods matching its selector in its namespace. Multi-container resources offer
 a container picker, including an all-containers option. Within logs, `c` selects
 a container, `p` toggles previous logs, and `Ctrl+R` reloads.
@@ -161,8 +162,8 @@ the settings file. Arguments support quoting and run directly inside the chosen
 container. Missing shells and Kubernetes permission denials are displayed.
 
 The shell takes over the native terminal, including resize delivery, then returns
-to ket on exit. `Ctrl+C` goes to the remote process; `Ctrl+]` disconnects locally.
-ket verifies the pod UID immediately before opening the connection. Kubernetes's
+to kqt on exit. `Ctrl+C` goes to the remote process; `Ctrl+]` disconnects locally.
+kqt verifies the pod UID immediately before opening the connection. Kubernetes's
 exec endpoint addresses a pod by name, so that check is not an atomic UID
 precondition. Shells use native client-go; kubectl is not required.
 
@@ -204,12 +205,17 @@ content; ordinary Kubernetes RBAC still applies.
 
 ## Saved settings and layouts
 
-Settings live in `$XDG_CONFIG_HOME/ket/config.yaml`, or
-`~/.config/ket/config.yaml`. Missing files use defaults and are created when
+Settings live in `$XDG_CONFIG_HOME/kqt/config.yaml`, or
+`~/.config/kqt/config.yaml`. Missing files use defaults and are created when
 preferences are saved. View and namespace are saved automatically, per context.
 Theme selection, inspector format, and chosen layout are also saved. Launch flags
 override saved values. A theme preview is not saved until Enter; Escape cancels it.
 The theme name appears on the connection line for ten seconds after selection.
+
+To keep settings from an earlier `ket` build, copy its `config.yaml` (or
+`config.toml`) and `themes/` directory into `~/.config/kqt/`, respecting
+`XDG_CONFIG_HOME` if set. Preserve any existing `kqt` configuration. Update
+`KET_THEME` to `KQT_THEME` in your shell configuration.
 
 ```sh
 kqt config                      # Print a YAML example
@@ -259,7 +265,7 @@ JSON Pointer columns such as `/spec/replicas` and
 numerically; age uses creation time.
 
 All 18 Maestro palettes are bundled. `kqt themes` lists them. `--theme`
-overrides `KET_THEME`, which overrides the saved theme. Custom themes retain the
+overrides `KQT_THEME`, which overrides the saved theme. Custom themes retain the
 Maestro TOML format under `themes/NAME.toml` beside the settings file:
 
 ```toml
@@ -278,7 +284,7 @@ file is not overwritten. Restart to load manual configuration changes.
 Existing default `config.toml` settings are loaded if no YAML file exists, then
 carried into `config.yaml` on the first save; the old file stays unchanged.
 Explicit TOML config paths are still supported. No connection credentials are
-stored in ket's UI config.
+stored in kqt's UI config.
 
 ## Verification and remaining scope
 

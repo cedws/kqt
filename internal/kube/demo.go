@@ -104,11 +104,11 @@ func NewDemo() *Demo {
 			break
 		}
 	}
-	add("exploration.ket.dev/v1", "Widget", "platform", "example", map[string]interface{}{"description": "Discovered custom resource"}, map[string]interface{}{"phase": "Ready"})
+	add("exploration.kqt.dev/v1", "Widget", "platform", "example", map[string]interface{}{"description": "Discovered custom resource"}, map[string]interface{}{"phase": "Ready"})
 	return d
 }
 func (d *Demo) Resources(context.Context) ([]Resource, error) {
-	return Merge([]Resource{{schema.GroupVersionResource{Group: "exploration.ket.dev", Version: "v1", Resource: "widgets"}, "Widget", true, []string{"wdg"}}}), nil
+	return Merge([]Resource{{schema.GroupVersionResource{Group: "exploration.kqt.dev", Version: "v1", Resource: "widgets"}, "Widget", true, []string{"wdg"}}}), nil
 }
 func (d *Demo) List(ctx context.Context, q Query) ([]unstructured.Unstructured, error) {
 	d.mu.RLock()

@@ -35,11 +35,11 @@ func TestClientKubernetesHTTPContract(t *testing.T) {
 		case "/api":
 			fmt.Fprint(w, `{"kind":"APIVersions","versions":["v1"]}`)
 		case "/apis":
-			fmt.Fprint(w, `{"kind":"APIGroupList","groups":[{"name":"demo.ket.dev","versions":[{"groupVersion":"demo.ket.dev/v1","version":"v1"}],"preferredVersion":{"groupVersion":"demo.ket.dev/v1","version":"v1"}}]}`)
+			fmt.Fprint(w, `{"kind":"APIGroupList","groups":[{"name":"demo.kqt.dev","versions":[{"groupVersion":"demo.kqt.dev/v1","version":"v1"}],"preferredVersion":{"groupVersion":"demo.kqt.dev/v1","version":"v1"}}]}`)
 		case "/api/v1":
 			fmt.Fprint(w, `{"kind":"APIResourceList","groupVersion":"v1","resources":[{"name":"pods","kind":"Pod","namespaced":true,"verbs":["get","list"],"shortNames":["po"]},{"name":"pods/log","kind":"Pod","verbs":["get"]}]}`)
-		case "/apis/demo.ket.dev/v1":
-			fmt.Fprint(w, `{"kind":"APIResourceList","groupVersion":"demo.ket.dev/v1","resources":[{"name":"widgets","kind":"Widget","namespaced":true,"verbs":["list"],"shortNames":["wdg"]}]}`)
+		case "/apis/demo.kqt.dev/v1":
+			fmt.Fprint(w, `{"kind":"APIResourceList","groupVersion":"demo.kqt.dev/v1","resources":[{"name":"widgets","kind":"Widget","namespaced":true,"verbs":["list"],"shortNames":["wdg"]}]}`)
 		case "/api/v1/namespaces/apps/pods":
 			q := r.URL.Query()
 			if q.Get("labelSelector") != "app=web" || q.Get("fieldSelector") != "spec.nodeName=worker" || q.Get("limit") != "500" {
@@ -75,7 +75,7 @@ func TestClientKubernetesHTTPContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	widget, err := Resolve(resources, "wdg")
-	if err != nil || widget.ID() != "widgets.demo.ket.dev" {
+	if err != nil || widget.ID() != "widgets.demo.kqt.dev" {
 		t.Fatalf("CRD discovery: %v %v", widget, err)
 	}
 	pod, _ := Resolve(resources, "po")
@@ -239,7 +239,7 @@ func TestClientEditGetAndVersionedMergePatch(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == "PATCH" {
-			if r.Header.Get("Content-Type") != "application/merge-patch+json" || r.URL.Query().Get("fieldManager") != "ket-editor" {
+			if r.Header.Get("Content-Type") != "application/merge-patch+json" || r.URL.Query().Get("fieldManager") != "kqt-editor" {
 				t.Errorf("wrong patch options: %s", r.URL)
 			}
 			if err := json.NewDecoder(r.Body).Decode(&gotPatch); err != nil {
@@ -261,7 +261,7 @@ func TestClientEditGetAndVersionedMergePatch(t *testing.T) {
 	if err != nil || object.GetUID() != "identity" || object.GetResourceVersion() != "7" {
 		t.Fatal("fresh resource read failed")
 	}
-	patch := []byte(`{"metadata":{"uid":"identity","resourceVersion":"7","annotations":{"ket.dev/test":"yes"}}}`)
+	patch := []byte(`{"metadata":{"uid":"identity","resourceVersion":"7","annotations":{"kqt.dev/test":"yes"}}}`)
 	if err = c.Patch(context.Background(), pod, "apps", "edit-me", patch); err != nil {
 		t.Fatal(err)
 	}

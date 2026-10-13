@@ -8,7 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"ket/internal/kube"
+	"github.com/z0mbix/kqt/internal/kube"
 )
 
 func fit(text string, width int) string {
@@ -225,7 +225,7 @@ func (m *model) View() tea.View {
 	w, h := m.width, m.height
 	var content string
 	if w < 40 || h < 12 {
-		content = fit("ket needs at least 40×12. Resize or press q.", w)
+		content = fit("kqt needs at least 40×12. Resize or press q.", w)
 	} else {
 		ns := m.route.namespace
 		if ns == "" {
@@ -245,7 +245,7 @@ func (m *model) View() tea.View {
 		if m.dataErr != "" {
 			state = "stale / disconnected"
 		}
-		brand := " ket  ·  The Kubernetes Exploration Tool"
+		brand := " kqt  ·  A Kubernetes Query Tool"
 		if m.options.Demo {
 			brand += "  ·  DEMO"
 		}
