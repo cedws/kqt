@@ -234,3 +234,11 @@ remote resize, Ctrl+C, disconnect, forwarding, and terminal restoration passed;
 the cluster was removed. Native and both FreeBSD cross-builds passed. The
 Kubernetes watch transport is unchanged by this UI update. Actual pointer use in
 every terminal emulator and FreeBSD runtime remain unqualified.
+
+Release checks exposed a timing-sensitive timeout in the stream-expiry contract
+test. Watch cleanup now cancels its HTTP request before stopping the decoder,
+so a read already waiting for the next frame cannot delay reconnection. Coverage
+includes both EOF and still-open stream errors, retains the checkpoint/count/
+scope assertions, and reports the received states on timeout. Ten repeated race
+runs passed on macOS, and the full race suite passed in a Linux amd64 Go 1.27.1
+container.

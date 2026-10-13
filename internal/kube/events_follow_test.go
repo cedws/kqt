@@ -37,8 +37,8 @@ func writeWatch(w http.ResponseWriter, kind watch.EventType, object any) {
 }
 
 func TestFollowEventsCheckpointsPaginationScopeExpiryAndCancellation(t *testing.T) {
-	for _, httpExpiry := range []bool{false, true} {
-		t.Run(fmt.Sprintf("http-expiry=%t", httpExpiry), func(t *testing.T) {
+	for _, tc := range []struct{ httpExpiry, holdOpen bool }{{false, false}, {false, true}, {true, false}} {
+		t.Run(fmt.Sprintf("http-expiry=%t/hold-open=%t", tc.httpExpiry, tc.holdOpen), func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			var mu sync.Mutex
@@ -99,11 +99,16 @@ func TestFollowEventsCheckpointsPaginationScopeExpiryAndCancellation(t *testing.
 						t.Errorf("reconnect lost bookmark/unrelated checkpoint: %s", q.Get("resourceVersion"))
 					}
 					status := map[string]interface{}{"apiVersion": "v1", "kind": "Status", "status": "Failure", "reason": "Expired", "message": "too old resource version", "code": 410}
-					if httpExpiry {
+					if tc.httpExpiry {
 						w.WriteHeader(410)
 						json.NewEncoder(w).Encode(status)
 					} else {
 						writeWatch(w, watch.Error, status)
+						// A watch error need not coincide with the server closing
+						// its body. Reconnection must actively release this stream.
+						if tc.holdOpen {
+							<-r.Context().Done()
+						}
 					}
 				case 3:
 					if q.Get("resourceVersion") != "rv/200" {
@@ -137,12 +142,14 @@ func TestFollowEventsCheckpointsPaginationScopeExpiryAndCancellation(t *testing.
 				done <- c.FollowEvents(ctx, Query{Resource: events, Namespace: "apps", Fields: "involvedObject.uid=pod-uid", Labels: "app=web"}, func(v EventUpdate) { updates <- v })
 			}()
 			var objects []EventUpdate
+			var trace []string
 			gap := false
 			deadline := time.After(5 * time.Second)
 		read:
 			for {
 				select {
 				case v := <-updates:
+					trace = append(trace, fmt.Sprintf("%s rv=%s state=%s gap=%t %s", v.Type, v.Object.GetResourceVersion(), v.State, v.Gap, v.Message))
 					gap = gap || v.Gap
 					if v.Type != "" {
 						objects = append(objects, v)
@@ -152,7 +159,10 @@ func TestFollowEventsCheckpointsPaginationScopeExpiryAndCancellation(t *testing.
 					}
 				case <-deadline:
 					cancel()
-					t.Fatal("watch did not reconnect and relist")
+					mu.Lock()
+					requestCounts := fmt.Sprintf("lists=%d watches=%d", lists, streams)
+					mu.Unlock()
+					t.Fatalf("watch did not reconnect and relist (%s): %v", requestCounts, trace)
 				}
 			}
 			cancel()

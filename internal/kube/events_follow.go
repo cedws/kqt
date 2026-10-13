@@ -124,6 +124,9 @@ func (c *Client) FollowEvents(ctx context.Context, q Query, emit func(EventUpdat
 						send(update)
 					}
 				})
+				// Abort the HTTP read before closing its decoder. The decoder
+				// may already be waiting for the next frame after a watch error.
+				cancel()
 				stream.Stop()
 				if healthy || time.Since(started) > 10*time.Second {
 					backoff = 250 * time.Millisecond
