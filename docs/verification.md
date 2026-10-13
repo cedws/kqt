@@ -110,3 +110,31 @@ CI and `just smoke` now include the demo operator check; `just smoke-live` runs
 the optional API qualification and live operator PTY check. Provider-specific
 authentication refresh, every Kubernetes/proxy/server version, and exhaustive
 network failure scenarios remain outside this coverage.
+
+## Log presentation and FreeBSD builds (2026-10-13)
+
+Regression checks reproduced coloured application logs through the live backend
+and UI queue, and verified cleaned snapshots, search, and private exports. ANSI
+colour, cursor, title, clipboard, and hyperlink sequences are removed completely.
+Log views at 40x12, 80x24, 180x48, and 240x76 retain the connection header, fill
+the main pane without inspector fragments, and fit the terminal width and height.
+Closing logs restores the ordinary detail viewport dimensions.
+
+Race tests, static checks, and the existing three-layout demo terminal checks
+passed. FreeBSD amd64 and arm64 cross-builds with CGO disabled passed; executable
+headers and Go build metadata confirm the target OS and architecture. The build
+and release workflow now covers all six macOS/Linux/FreeBSD targets. FreeBSD
+runtime and terminal behavior have not been qualified on a FreeBSD host.
+
+## Mixed-format log highlighting (2026-10-13)
+
+Race tests, vet, and the three-layout demo/operator PTY checks passed with mixed
+JSON and plain-text demo logs. Regression tests across all 18 bundled themes
+cover source/timestamp/level prefixes, JSON arrays, escaped strings, large integer
+precision, severity values, Unicode widths, and fallback for malformed or partial
+JSON. Ordinary prose and similarly named fields do not become severity labels.
+Snapshot/live views retain exact cleaned text; searches span styled tokens and
+private exports contain no colour codes. Cache eviction and theme invalidation
+also passed. The refreshed log screenshot comes from an actual demo PTY capture
+and was visually inspected for JSON and plain-text colours. Both FreeBSD targets
+were rebuilt successfully with the final highlighting changes.

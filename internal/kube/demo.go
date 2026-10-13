@@ -146,7 +146,7 @@ func (d *Demo) Logs(ctx context.Context, ns, pod, container string, previous boo
 	if previous {
 		suffix = " (previous instance)"
 	}
-	return fmt.Sprintf("2026-10-12T12:00:00Z [%s/%s:%s] starting%s\n2026-10-12T12:00:01Z configuration loaded\n2026-10-12T12:00:02Z listening on :80\n2026-10-12T12:00:05Z GET /health 200\n2026-10-12T12:00:08Z GET / 200", ns, pod, container, suffix), nil
+	return fmt.Sprintf("2026-10-12T12:00:00Z [%s/%s:%s] INFO starting%s\n2026-10-12T12:00:01Z configuration loaded\n2026-10-12T12:00:02Z listening on :80\n2026-10-12T12:00:05Z GET /health 200\n2026-10-12T12:00:08Z GET / 200\n2026-10-12T12:00:09Z {\"level\":\"info\",\"message\":\"request completed\",\"status\":200,\"duration_ms\":3.4}\n2026-10-12T12:00:10Z WARN slow request path=/api duration_ms=1200", ns, pod, container, suffix), nil
 }
 func (*Demo) Close() {}
 

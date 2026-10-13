@@ -73,15 +73,24 @@ func yamlTokenColour(tk *token.Token) string {
 
 func (m *model) setTheme(t theme) {
 	m.theme = t
+	m.logColours = nil
 	m.updateInspector()
+	if m.showingLogs() && !m.logPaused {
+		m.renderLogs()
+	}
 }
 
 var jsonTokens = regexp.MustCompile(`"(?:[^"\\]|\\.)*"|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|true|false|null|[{}\[\]:,]`)
 
 func (t theme) renderJSON(text string) string {
+	return t.renderJSONTokens(text, false)
+}
+
+func (t theme) renderJSONTokens(text string, logLevels bool) string {
 	text = kube.SafeLines(text)
 	var out strings.Builder
 	end := 0
+	levelValue := false
 	for _, match := range jsonTokens.FindAllStringIndex(text, -1) {
 		out.WriteString(text[end:match[0]])
 		value, colour := text[match[0]:match[1]], "muted"
@@ -90,11 +99,22 @@ func (t theme) renderJSON(text string) string {
 			colour = "success"
 			if strings.HasPrefix(strings.TrimLeft(text[match[1]:], " \t\r\n"), ":") {
 				colour = "accent"
+				levelValue = logLevels && isLogLevelKey(value)
+			} else {
+				if levelValue {
+					if c := jsonLogLevelColour(value); c != "" {
+						colour = c
+					}
+				}
+				levelValue = false
 			}
 		case 't', 'f':
 			colour = "focus"
 		case '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
 			colour = "warning"
+		}
+		if value[0] != '"' && value != ":" {
+			levelValue = false
 		}
 		out.WriteString(t.style(colour).Render(value))
 		end = match[1]

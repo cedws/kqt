@@ -2,15 +2,128 @@ package tui
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/z0mbix/kqt/internal/kube"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
+
+type colouredLogBackend struct{ *kube.Demo }
+
+func (b *colouredLogBackend) StreamLogs(context.Context, string, string, string, *time.Time) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader("2026-10-03T20:59:23Z \x1b[32mINFO\x1b[0m \x1b[2mapp\x1b[0m: ready\n")), nil
+}
+
+func TestStreamColoursAreSanitizedAtUIBoundary(t *testing.T) {
+	b := &colouredLogBackend{kube.NewDemo()}
+	r, _ := kube.Resolve(kube.Builtins(), "pods")
+	pod, err := b.Get(context.Background(), r, "default", "web-7c9f6d8b5-0001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	feed := newLogFeed()
+	done := make(chan error, 1)
+	go func() { done <- kube.FollowWorkload(ctx, b, pod, "web", feed.append) }()
+	select {
+	case <-feed.notify:
+	case <-time.After(2 * time.Second):
+		t.Fatal("coloured log stream produced no output")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("log stream did not stop")
+	}
+	lines, _, _, _ := feed.drain()
+	if len(lines) != 1 || lines[0] != "2026-10-03T20:59:23Z INFO app: ready" {
+		t.Fatalf("stream still exposes escaped colour fragments: %q", lines)
+	}
+}
+
+func TestLogColourCodesAreCleanedForLiveSnapshotSearchAndExport(t *testing.T) {
+	m := demoModel(t)
+	m.logObject, m.logContainer = m.rows[1], "web"
+	m.logFollow = false
+	m.loadLogs()
+	raw := "2026-10-03T20:59:23Z \x1b[32mINFO\x1b[0m \x1b[2mapp\x1b[0m: ready revision=3"
+	want := "2026-10-03T20:59:23Z INFO app: ready revision=3"
+	m.Update(logsMsg{generation: m.generation, token: m.logToken, content: raw})
+	if got := ansi.Strip(m.panel.GetContent()); got != want {
+		t.Fatalf("snapshot retained colour fragments: %q", got)
+	}
+	m.logLines, m.logSize = nil, 0
+	m.logFollow = true
+	m.logFeed = newLogFeed()
+	m.logFeed.append(raw)
+	m.logPulse(logPulseMsg{m.generation, m.logToken, m.logFeed})
+	m.logSearch = "INFO app"
+	m.renderLogs()
+	if got := ansi.Strip(m.panel.GetContent()); got != want {
+		t.Fatalf("live search retained colour fragments: %q", got)
+	}
+	path := filepath.Join(t.TempDir(), "logs.txt")
+	m.mode = "log-save"
+	m.input.SetValue(path)
+	message := m.logsInputKey(tea.KeyPressMsg{Code: tea.KeyEnter})().(logSavedMsg)
+	if message.err != nil {
+		t.Fatal(message.err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != want+"\n" {
+		t.Fatalf("export is not the cleaned displayed text: %q %v", data, err)
+	}
+}
+
+func TestLogsFillMainPaneWithoutInspectorShowingThrough(t *testing.T) {
+	m := demoModel(t)
+	for _, size := range [][2]int{{80, 24}, {180, 48}, {240, 76}, {40, 12}} {
+		for _, layout := range []string{"classic", "inspector", "bottom"} {
+			m.layout = layout
+			m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
+			m.logObject, m.logContainer = m.rows[1], "web"
+			m.logFollow = false
+			m.loadLogs()
+			m.Update(logsMsg{generation: m.generation, token: m.logToken, content: "INFO " + strings.Repeat("界e\u0301 ", 100)})
+			m.inspector.SetContent(strings.Repeat(strings.Repeat("¤", size[0])+"\n", size[1]))
+			for _, mode := range []string{"logs", "log-search", "log-save"} {
+				m.mode = mode
+				m.resize()
+				view := m.View().Content
+				if strings.Contains(view, "¤") {
+					t.Fatalf("%dx%d %s %s shows the inspector behind logs", size[0], size[1], layout, mode)
+				}
+				lines := strings.Split(view, "\n")
+				if len(lines) != size[1] {
+					t.Fatalf("%dx%d %s %s height is %d", size[0], size[1], layout, mode, len(lines))
+				}
+				for _, line := range lines {
+					if ansi.StringWidth(line) != size[0] {
+						t.Fatalf("%dx%d %s %s line width is %d", size[0], size[1], layout, mode, ansi.StringWidth(line))
+					}
+				}
+				if !strings.Contains(ansi.Strip(lines[2]), "connected") {
+					t.Fatal("log view hid the cluster connection header")
+				}
+			}
+			m.mode = "logs"
+			key(m, "esc")
+			m.openDetails(true, false)
+			if m.panel.Width() != size[0]-6 || m.panel.Height() != size[1]-6 {
+				t.Fatal("closing logs did not restore detail viewport dimensions")
+			}
+		}
+	}
+}
 
 func TestLiveLogPauseSearchBoundsAndStaleMessages(t *testing.T) {
 	m := demoModel(t)

@@ -60,8 +60,12 @@ func (m *model) resize() {
 	if m.mode == "picker" {
 		m.input.SetWidth(max(1, min(90, m.width-4)-6))
 	}
-	m.panel.SetWidth(max(1, m.width-6))
-	m.panel.SetHeight(max(1, m.height-6))
+	panelWidth, panelHeight := m.width-6, m.height-6
+	if m.showingLogs() {
+		panelWidth, panelHeight = m.width-2, m.height-8
+	}
+	m.panel.SetWidth(max(1, panelWidth))
+	m.panel.SetHeight(max(1, panelHeight))
 	d := m.inspectorDimensions()
 	m.inspector.SetWidth(max(1, d.width-2))
 	m.inspector.SetHeight(max(1, d.height-2))
@@ -271,7 +275,11 @@ func (m *model) View() tea.View {
 		bodyHeight := h - 6
 		d := m.inspectorDimensions()
 		body := ""
-		if d.width > 0 {
+		if m.showingLogs() {
+			title := m.panelTitle + " · Esc close · hjkl scroll · c container · p previous · Ctrl+R reload"
+			body = m.frame(title, m.panel.View(), w, bodyHeight, true)
+			body = lipgloss.NewStyle().Background(m.theme.color("surface")).Foreground(m.theme.color("foreground")).Render(body)
+		} else if d.width > 0 {
 			if d.bottom {
 				body = m.table(w, bodyHeight-d.height) + "\n" + m.inspectorView(d)
 			} else {
@@ -311,12 +319,12 @@ func (m *model) View() tea.View {
 		if m.inspectorFocused {
 			help = " j/k scroll  Ctrl+U/D page  g/G ends  Tab/Esc list  ? help  q quit"
 		}
-		if m.mode == "logs" || m.mode == "log-search" || m.mode == "log-save" {
+		if m.showingLogs() {
 			help = " Space pause  / search  f live/snapshot  o save  c container  p previous  Esc close"
 		}
 		lines = append(lines, m.theme.style("muted").Render(fit(help, w)))
 		content = strings.Join(lines, "\n")
-		if m.mode == "picker" || m.mode == "details" || m.mode == "logs" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "events" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" {
+		if m.mode == "picker" || m.mode == "details" || m.mode == "events" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" {
 			mw, mh := w-4, h-4
 			modal := ""
 			if m.mode == "picker" {
@@ -325,9 +333,6 @@ func (m *model) View() tea.View {
 				modal = m.pickerView(mw, mh)
 			} else {
 				title := kube.Safe(m.panelTitle) + " · Esc close · hjkl scroll"
-				if m.mode == "logs" {
-					title += " · c container · p previous · Ctrl+R reload"
-				}
 				modal = m.frame(title, m.panel.View(), mw, mh, true)
 			}
 			modal = lipgloss.NewStyle().Background(m.theme.color("surface")).Foreground(m.theme.color("foreground")).Render(modal)

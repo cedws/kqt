@@ -9,6 +9,23 @@ import (
 	"time"
 )
 
+func TestSafeLogLinesRemovesCompleteEscapeSequences(t *testing.T) {
+	for _, tt := range []struct{ name, input, want string }{
+		{"coloured application log", "2026-10-03T20:59:23Z \x1b[2m2026-10-03T20:59:23Z\x1b[0m \x1b[32mINFO\x1b[0m \x1b[2mapp\x1b[0m: ready \x1b[3mrevision\x1b[0m=3", "2026-10-03T20:59:23Z 2026-10-03T20:59:23Z INFO app: ready revision=3"},
+		{"screen controls", "before\x1b[2J\x1b[1;1Hafter", "beforeafter"},
+		{"title and clipboard controls", "\x1b]0;hidden title\x07text\x1b]52;c;c2VjcmV0\x1b\\", "text"},
+		{"hyperlink", "\x1b]8;;https://example.test\x1b\\readable\x1b]8;;\x1b\\", "readable"},
+		{"multiline colour", "\x1b[32mfirst\r\nsecond\x1b[0m", "first\nsecond"},
+		{"text and remaining controls", "界 e\u0301\ttext\x00", "界 e\u0301    text�"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SafeLogLines(tt.input); got != tt.want {
+				t.Fatalf("want %q, got %q", tt.want, got)
+			}
+		})
+	}
+}
+
 type measuredLogs struct {
 	*Demo
 	active, maximum, calls atomic.Int32

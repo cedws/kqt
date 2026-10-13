@@ -32,7 +32,7 @@ With mise and just, use `just build`, `just demo`, and `just check`.
 The **Build binaries** GitHub workflow runs on pushes (including tags), pull
 requests, and manual dispatch. Pushing a [SemVer](https://semver.org/) tag such as
 `v0.0.1` creates a [GitHub release](https://github.com/z0mbix/kqt/releases) after
-the tests and all four builds pass. Tags with prerelease identifiers, such as
+the tests and all six builds pass. Tags with prerelease identifiers, such as
 `v0.1.0-rc.1`, create prereleases. Invalid version tags fail before building.
 Download the matching release archive, or use the workflow run's **Artifacts**
 section for development builds:
@@ -43,6 +43,8 @@ section for development builds:
 | macOS Apple Silicon | `kqt-darwin-arm64` |
 | Linux x86-64 | `kqt-linux-amd64` |
 | Linux ARM64 | `kqt-linux-arm64` |
+| FreeBSD x86-64 | `kqt-freebsd-amd64` |
+| FreeBSD ARM64 | `kqt-freebsd-arm64` |
 
 Each artifact contains a `.tar.gz` archive and its `.sha256` checksum file. The
 archive includes the executable, README, and theme license notices. Extract it
@@ -52,7 +54,7 @@ include a combined `SHA256SUMS` file. From the download directory, verify the
 chosen archive with `shasum -a 256 -c kqt-darwin-arm64.tar.gz.sha256` (adjust the
 platform as needed).
 Tag builds report the tag as their version; other builds report `dev-<commit>`.
-All four targets are cross-compiled on Linux with CGO disabled.
+All six targets are cross-compiled on Linux with CGO disabled.
 
 ## Kubernetes connection
 
@@ -123,6 +125,14 @@ Select a pod, deployment, or statefulset and press `L`. For a workload, kqt read
 all pods matching its selector in its namespace. Multi-container resources offer
 a container picker, including an all-containers option. Within logs, `c` selects
 a container, `p` toggles previous logs, and `Ctrl+R` reloads.
+Logs fill the main pane, keeping the cluster and namespace visible. Container
+colour codes and other terminal escape sequences are removed before kqt applies
+the selected theme. Highlighting is automatic for each line: complete JSON
+objects/arrays get syntax colours, including severity colours for `level`,
+`severity`, and `lvl` values. Plain-text logs get subtle timestamp/source colours
+and highlighted levels such as `INFO`, `WARN`, and `ERROR`. Mixed formats work
+together; incomplete JSON and other text stay readable. Messages keep their
+original spacing and order, and saved logs contain plain text without colour codes.
 
 Logs follow live by default. Workloads attach to new matching pods and stop
 following removed pods; discovery reconciles every two seconds. Output from

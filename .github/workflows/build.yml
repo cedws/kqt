@@ -48,7 +48,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        goos: [darwin, linux]
+        goos: [darwin, linux, freebsd]
         goarch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v7
@@ -99,7 +99,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download all four binary packages
+      - name: Download all six binary packages
         uses: actions/download-artifact@v8
         with:
           pattern: kqt-*
@@ -110,7 +110,7 @@ jobs:
         working-directory: release
         run: |
           set -euo pipefail
-          for platform in darwin-amd64 darwin-arm64 linux-amd64 linux-arm64; do
+          for platform in darwin-amd64 darwin-arm64 linux-amd64 linux-arm64 freebsd-amd64 freebsd-arm64; do
             test -s "kqt-$platform.tar.gz"
             sha256sum --check "kqt-$platform.tar.gz.sha256"
             tar -tzf "kqt-$platform.tar.gz" > /dev/null
@@ -133,5 +133,5 @@ jobs:
           gh release create "$RELEASE_TAG" \
             release/kqt-*.tar.gz release/kqt-*.tar.gz.sha256 release/SHA256SUMS \
             --verify-tag --title "kqt $RELEASE_TAG" --generate-notes \
-            --notes 'macOS and Linux binaries are available for amd64 and arm64. Each archive includes kqt, the README, screenshots, and theme license notices. Verify downloads using SHA256SUMS or the individual .sha256 files.' \
+            --notes 'macOS, Linux, and FreeBSD binaries are available for amd64 and arm64. Each archive includes kqt, the README, screenshots, and theme license notices. Verify downloads using SHA256SUMS or the individual .sha256 files.' \
             "${flags[@]}"

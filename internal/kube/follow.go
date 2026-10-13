@@ -51,7 +51,8 @@ func FollowWorkload(ctx context.Context, b Backend, target unstructured.Unstruct
 			if target.GetKind() == "Pod" && container != "*" {
 				line = strings.TrimPrefix(line, "["+target.GetNamespace()+"/"+target.GetName()+":"+container+"] ")
 			}
-			emit(SafeLines(line))
+			// The log view sanitizes terminal controls before buffering output.
+			emit(line)
 		}
 	}
 	active := map[string]context.CancelFunc{}

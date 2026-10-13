@@ -110,6 +110,7 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 			m.closeLog()
 			m.closeEvents()
 			m.mode = ""
+			m.resize()
 			return nil
 		}
 		if m.mode == "logs" {

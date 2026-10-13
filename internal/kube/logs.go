@@ -7,8 +7,15 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/charmbracelet/x/ansi"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
+
+// SafeLogLines removes terminal escape sequences as a whole, so container
+// colour codes do not become visible fragments after escaping control bytes.
+func SafeLogLines(s string) string {
+	return SafeLines(ansi.Strip(s))
+}
 
 // LogSnapshot reads bounded snapshots with four concurrent requests. A workload
 // selector stays in its namespace; errors remain visible alongside healthy pods.

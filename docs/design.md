@@ -68,6 +68,20 @@ rendering while collection continues. Search is a case-insensitive text filter;
 exports write the displayed buffer to a new private file. Individual source
 failures remain visible alongside healthy output. Single-pod streams stop on
 UID replacement; context changes/closing the pane cancel all sources.
+The UI removes complete ANSI escape sequences before buffering or displaying
+logs. Logs replace the main table/inspector pane, keeping the connection header
+visible; search and exports use the same cleaned text.
+
+Log highlighting detects complete JSON objects/arrays independently for each
+line, after optional source, RFC3339 timestamp, and severity prefixes. It colours
+the original JSON tokens without reformatting or converting numeric values;
+`level`, `severity`, and `lvl` string values also use severity colours. Ordinary
+messages highlight explicit log-level fields/brackets and uppercase levels.
+Malformed/partial JSON remains plain text, so multiline fragments and mixed
+sources need no parser mode. The current theme supplies all colours. Rendered
+lines are cached only while retained in the log buffer; eviction, stream closure,
+and theme changes release or invalidate those entries. Filtering/export use
+plain text, so searches can span coloured tokens and exports contain no ANSI.
 
 ## Events, metrics, and connections
 

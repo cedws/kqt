@@ -133,6 +133,7 @@ type model struct {
 	logFollow, logPaused, logTail, logDone bool
 	logFeed                                *logFeed
 	logLines                               []string
+	logColours                             map[string]string
 	logSize, logDropped                    int
 	logSearch                              string
 	pickerReturn                           string
@@ -537,6 +538,7 @@ func (m *model) closeLog() {
 		m.logCancel = nil
 	}
 	m.logFeed = nil
+	m.logColours = nil
 }
 func (m *model) loadLogs() tea.Cmd {
 	if m.logFollow && !m.logPrevious {
@@ -547,6 +549,7 @@ func (m *model) loadLogs() tea.Cmd {
 	ctx, cancel := context.WithTimeout(m.session.ctx, 30*time.Second)
 	m.logCancel = cancel
 	m.mode = "logs"
+	m.resize()
 	m.panel.SoftWrap = true
 	m.logPaused = false
 	m.logSearch = ""
@@ -631,15 +634,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if v.err != nil {
 			m.panel.SetContent("Unable to read logs: " + kube.Safe(v.err.Error()) + "\n\nCtrl+R retries; Esc closes.")
 		} else {
-			content := kube.SafeLines(v.content)
+			content := kube.SafeLogLines(v.content)
 			if content == "" {
 				content = "No log lines returned."
 			}
-			m.panel.SetContent(content)
 			m.logLines = strings.Split(content, "\n")
 			m.logSize = len(content)
 			m.logDropped = 0
 			m.logTail = false
+			m.renderLogs()
 		}
 	case logPulseMsg:
 		return m, m.logPulse(v)

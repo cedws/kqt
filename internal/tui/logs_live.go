@@ -37,6 +37,7 @@ func (f *logFeed) append(line string) {
 	if len(line) > 1024*1024 {
 		line = line[:1024*1024] + " … line truncated"
 	}
+	line = kube.SafeLogLines(line)
 	f.lines = append(f.lines, line)
 	f.size += len(line) + 1
 	for len(f.lines) > logBufferLines || f.size > logBufferBytes {
@@ -85,6 +86,7 @@ func (m *model) followLogs() tea.Cmd {
 	m.logSearch = ""
 	m.logDone = false
 	m.mode = "logs"
+	m.resize()
 	m.panel.SoftWrap = true
 	m.panel.SetContent("Waiting for log lines…")
 	m.panel.GotoTop()
@@ -92,6 +94,9 @@ func (m *model) followLogs() tea.Cmd {
 	feed, b, target, container, g, token := m.logFeed, m.backend, m.logObject, m.logContainer, m.generation, m.logToken
 	go func() { err := kube.FollowWorkload(ctx, b, target, container, feed.append); feed.finish(err) }()
 	return waitLog(ctx, g, token, feed)
+}
+func (m *model) showingLogs() bool {
+	return m.mode == "logs" || m.mode == "log-search" || m.mode == "log-save"
 }
 func (m *model) logTitle() {
 	m.panelTitle = "Logs · " + m.logObject.GetNamespace() + "/" + m.logObject.GetName() + ":" + m.logContainer
@@ -114,12 +119,21 @@ func (m *model) logTitle() {
 	}
 }
 func (m *model) logContent() string {
+	return m.logContentWith(nil)
+}
+
+// Filtering and export always use plain text; styling happens only for display.
+func (m *model) logContentWith(render func(string) string) string {
 	var lines []string
 	if m.logDropped > 0 {
 		lines = append(lines, fmt.Sprintf("[kqt] %d older lines discarded (4 MiB / 10,000 line buffer)", m.logDropped))
 	}
+	query := strings.ToLower(m.logSearch)
 	for _, line := range m.logLines {
-		if strings.Contains(strings.ToLower(line), strings.ToLower(m.logSearch)) {
+		if query == "" || strings.Contains(strings.ToLower(line), query) {
+			if render != nil {
+				line = render(line)
+			}
 			lines = append(lines, line)
 		}
 	}
@@ -131,7 +145,17 @@ func (m *model) logContent() string {
 func (m *model) renderLogs() {
 	m.logTitle()
 	offset := m.panel.YOffset()
-	m.panel.SetContent(m.logContent())
+	if m.logColours == nil {
+		m.logColours = make(map[string]string)
+	}
+	m.panel.SetContent(m.logContentWith(func(line string) string {
+		styled, ok := m.logColours[line]
+		if !ok {
+			styled = m.theme.renderLogLine(line)
+			m.logColours[line] = styled
+		}
+		return styled
+	}))
 	if m.logTail {
 		m.panel.GotoBottom()
 	} else {
@@ -150,6 +174,7 @@ func (m *model) logPulse(v logPulseMsg) tea.Cmd {
 	}
 	for len(m.logLines) > logBufferLines || m.logSize > logBufferBytes {
 		m.logSize -= len(m.logLines[0]) + 1
+		delete(m.logColours, m.logLines[0])
 		m.logLines[0] = ""
 		m.logLines = m.logLines[1:]
 		m.logDropped++
