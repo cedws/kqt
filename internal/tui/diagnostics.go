@@ -75,6 +75,7 @@ func (m *model) closeEvents() {
 	m.eventDropped, m.eventGaps = 0, 0
 }
 func (m *model) toggleMetrics() tea.Cmd {
+	m.stopResourceWatch()
 	m.notice = ""
 	m.metricsEnabled = !m.metricsEnabled
 	m.metricsWarning = ""

@@ -305,3 +305,20 @@ CronJob suspend/resume, real manual Job creation and preconditioned deletion.
 Status-only version advances are accepted; changed specifications are rejected.
 The write uses a fresh resource version, with bounded retries for API conflicts.
 The test cluster and volumes were removed after qualification.
+
+## v0.1.0: live resource tables
+
+The generic list/watch lifecycle retains paginated checkpoints, bookmarks,
+reconnect/backoff, expiry recovery and cancellation. Resource resyncs stage a
+complete replacement snapshot; missing/deleted rows cannot survive a relist.
+A bounded channel applies backpressure instead of dropping resource updates.
+Model checks cover changes, selection, obsolete scope messages, denied-watch
+polling fallback and clearing stale revealed Secrets. Native contracts cover
+namespace/label filtering, cluster-scoped URLs and still-open expired streams.
+Existing event fixtures now include the labels their API selector requests.
+
+Full race/static checks, the three-layout/restart PTY suite and all four feature
+PTY flows passed. A disposable real cluster confirmed watch add/update/delete
+notifications, immediate table updates and live refresh of an open JSON panel.
+The watch indicator remains visible alongside discovery warnings. The test
+cluster and its volumes were removed after qualification.

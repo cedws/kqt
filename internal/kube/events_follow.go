@@ -9,8 +9,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/dynamic"
 )
+
+type ResourceWatcher interface {
+	FollowResources(context.Context, Query, func(EventUpdate)) error
+}
 
 type EventWatcher interface {
 	FollowEvents(context.Context, Query, func(EventUpdate)) error
@@ -24,6 +30,7 @@ type EventUpdate struct {
 	State   string
 	Message string
 	Synced  bool
+	Reset   bool
 	Gap     bool
 }
 
@@ -31,11 +38,26 @@ func (c *Client) FollowEvents(ctx context.Context, q Query, emit func(EventUpdat
 	if q.Resource.Kind != "Event" {
 		return fmt.Errorf("event watches require an Event resource")
 	}
+	return c.followObjects(ctx, q, emit)
+}
+func (c *Client) FollowResources(ctx context.Context, q Query, emit func(EventUpdate)) error {
+	return c.followObjects(ctx, q, emit)
+}
+func (c *Client) followObjects(ctx context.Context, q Query, emit func(EventUpdate)) error {
 	selector, err := fields.ParseSelector(q.Fields)
 	if err != nil {
 		return err
 	}
-	resource := c.streamDynamic.Resource(q.Resource.GVR).Namespace(q.Namespace)
+	labelSelector, err := labels.Parse(q.Labels)
+	if err != nil {
+		return err
+	}
+	var resource dynamic.ResourceInterface = c.streamDynamic.Resource(q.Resource.GVR)
+	if q.Resource.Namespaced {
+		resource = c.streamDynamic.Resource(q.Resource.GVR).Namespace(q.Namespace)
+	} else {
+		q.Namespace = ""
+	}
 	var version string
 	synced := false
 	backoff := 250 * time.Millisecond
@@ -53,6 +75,25 @@ func (c *Client) FollowEvents(ctx context.Context, q Query, emit func(EventUpdat
 		}
 	}
 	matches := func(o unstructured.Unstructured) bool {
+		if !labelSelector.Matches(labels.Set(o.GetLabels())) {
+			return false
+		}
+		for _, field := range []string{"metadata.name", "metadata.namespace", "spec.nodeName"} {
+			if wanted, restricted := selector.RequiresExactMatch(field); restricted {
+				value := ""
+				switch field {
+				case "metadata.name":
+					value = o.GetName()
+				case "metadata.namespace":
+					value = o.GetNamespace()
+				case "spec.nodeName":
+					value = Text(o, "spec", "nodeName")
+				}
+				if value != wanted {
+					return false
+				}
+			}
+		}
 		if q.Namespace != "" && o.GetNamespace() != q.Namespace {
 			return false
 		}
@@ -66,6 +107,7 @@ func (c *Client) FollowEvents(ctx context.Context, q Query, emit func(EventUpdat
 	send(EventUpdate{State: "connecting"})
 	for ctx.Err() == nil {
 		if version == "" {
+			send(EventUpdate{State: "listing", Reset: true})
 			request, cancel := context.WithTimeout(ctx, 15*time.Second)
 			options := metav1.ListOptions{Limit: 500, FieldSelector: q.Fields, LabelSelector: q.Labels}
 			var listVersion string
@@ -78,7 +120,7 @@ func (c *Client) FollowEvents(ctx context.Context, q Query, emit func(EventUpdat
 				if listVersion == "" {
 					listVersion = list.GetResourceVersion()
 				} else if listVersion != list.GetResourceVersion() {
-					err = fmt.Errorf("event list changed resource version between pages")
+					err = fmt.Errorf("resource list changed resource version between pages")
 					break
 				}
 				for _, o := range list.Items {
@@ -93,7 +135,7 @@ func (c *Client) FollowEvents(ctx context.Context, q Query, emit func(EventUpdat
 			}
 			cancel()
 			if err == nil && listVersion == "" {
-				err = fmt.Errorf("event list did not report a resource version")
+				err = fmt.Errorf("resource list did not report a resource version")
 			}
 			if err == nil {
 				version, synced = listVersion, true
@@ -147,7 +189,7 @@ func (c *Client) FollowEvents(ctx context.Context, q Query, emit func(EventUpdat
 		}
 		if gap {
 			version = ""
-			message = "Event history expired; reloading. Some events may have been missed."
+			message = "Watch history expired; reloading. Some changes may have been missed."
 		}
 		send(EventUpdate{State: "reconnecting", Message: message, Gap: gap && synced})
 		timer := time.NewTimer(backoff)

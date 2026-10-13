@@ -104,5 +104,5 @@ func (m *model) actionResult(v actionResultMsg) tea.Cmd {
 	} else {
 		m.notice = kube.Safe(v.message)
 	}
-	return m.fetch()
+	return m.refreshResources()
 }

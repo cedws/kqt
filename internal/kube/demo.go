@@ -21,8 +21,10 @@ import (
 )
 
 type Demo struct {
-	objects []unstructured.Unstructured
-	mu      sync.RWMutex
+	resourceListenerID uint64
+	resourceListeners  map[uint64]chan struct{}
+	objects            []unstructured.Unstructured
+	mu                 sync.RWMutex
 }
 
 func NewDemo() *Demo {
@@ -242,6 +244,7 @@ func (d *Demo) Patch(ctx context.Context, r Resource, namespace, name string, pa
 		rv, _ := strconv.Atoi(o.GetResourceVersion())
 		next.SetResourceVersion(strconv.Itoa(rv + 1))
 		d.objects[i] = next
+		d.notifyResourcesLocked()
 		return nil
 	}
 	return apierrors.NewNotFound(r.GVR.GroupResource(), name)

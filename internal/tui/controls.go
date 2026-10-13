@@ -125,7 +125,7 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 			m.cancelEdit()
 			m.mode = ""
 			m.notice = "Edit cancelled"
-			return m.fetch()
+			return m.refreshResources()
 		}
 		return nil
 	}
@@ -364,7 +364,7 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		if m.backend == nil {
 			return m.connect(m.contextName)
 		}
-		return m.fetch()
+		return m.refreshResources()
 	case "?":
 		m.mode = "help"
 		m.panelTitle = "Help"
@@ -636,7 +636,7 @@ func (m *model) command(value string) tea.Cmd {
 		if m.backend == nil {
 			return m.connect(m.contextName)
 		}
-		return m.fetch()
+		return m.refreshResources()
 	case "help":
 		m.mode = "help"
 		m.panelTitle = "Help"

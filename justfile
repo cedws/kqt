@@ -21,6 +21,7 @@ smoke: build
     python3 scripts/features-smoke.py --feature relations
     python3 scripts/features-smoke.py --feature manifest
     python3 scripts/features-smoke.py --feature actions
+    python3 scripts/features-smoke.py --feature watch
 
 smoke-live: build
     sh scripts/live-smoke.sh

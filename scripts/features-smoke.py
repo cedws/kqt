@@ -21,6 +21,7 @@ from terminal_screen import screen
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--binary',type=Path,default=Path('bin/kqt'))
 parser.add_argument('--feature',required=True)
+parser.add_argument('--kubeconfig',type=Path)
 args=parser.parse_args()
 
 def setup_child():
@@ -37,7 +38,8 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
     fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',height,width,0,0))
     original=termios.tcgetattr(slave)
     wrapper="import subprocess,sys; rc=subprocess.call(sys.argv[1:]); print('__kqt_exit__'+str(rc),flush=True); sys.stdin.readline(); sys.exit(rc)"
-    launch=[str(args.binary.resolve()),'--demo','--config',str(config),'-n','default']
+    launch=[str(args.binary.resolve()),'--config',str(config),'-n','kqt-test' if args.kubeconfig else 'default']
+    launch += ['--kubeconfig',str(args.kubeconfig.resolve())] if args.kubeconfig else ['--demo']
     process=subprocess.Popen([sys.executable,'-c',wrapper,*launch],stdin=slave,stdout=slave,stderr=slave,preexec_fn=setup_child,env=dict(os.environ,TERM='xterm-256color',COLORTERM='truecolor'))
     raw=bytearray()
     def pump(duration=0.15):
@@ -60,7 +62,7 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
             if value in current: return current
         raise AssertionError(value+' not on screen:\n'+current)
     try:
-        expect('pods [12]')
+        expect('pods [5]' if args.kubeconfig else 'pods [12]')
         if args.feature=='relations':
             send(':deploy\r'); expect('deployments.apps [1]')
             send('b'); expect('Relations'); expect('owned ReplicaSet')
@@ -72,6 +74,24 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
             send(':pvc\r'); expect('persistentvolumeclaims [1]')
             send('b'); expect('bound volume'); send('\r'); expect('persistentvolumes [1]')
             send('b'); expect('bound claim'); send('\x1b')
+        elif args.feature=='watch':
+            expect('live')
+            if args.kubeconfig:
+                context=subprocess.check_output(['kubectl','--kubeconfig',str(args.kubeconfig.resolve()),'config','current-context'],text=True).strip()
+                assert context.startswith('k3d-kqt-smoke-'), 'writes require disposable fixture'
+                cli=['kubectl','--kubeconfig',str(args.kubeconfig.resolve()),'-n','kqt-test']
+                send(':cm\r:labels app=kqt-feature-watch\r'); expect('configmaps [0]'); expect('live')
+                obj={'apiVersion':'v1','kind':'ConfigMap','metadata':{'name':'kqt-feature-watch','namespace':'kqt-test','labels':{'app':'kqt-feature-watch'}},'data':{'value':'first'}}
+                subprocess.run([*cli,'apply','-f','-'],input=json.dumps(obj),text=True,check=True,stdout=subprocess.DEVNULL)
+                expect('configmaps [1]'); send('J'); expect('first')
+                subprocess.run([*cli,'patch','configmap','kqt-feature-watch','--type=merge','-p','{"data":{"value":"second"}}'],check=True,stdout=subprocess.DEVNULL)
+                expect('second'); send('\x1b')
+                subprocess.run([*cli,'delete','configmap','kqt-feature-watch'],check=True,stdout=subprocess.DEVNULL)
+                expect('configmaps [0]')
+            else:
+                send(':deploy\r'); expect('live')
+                send(':scale 2\r'); expect('Confirm scale'); send('default/web\r'); expect('scale requested')
+                send(':pods\r'); expect('live'); send(':nodes\r'); expect('nodes [3]'); expect('live')
         elif args.feature=='actions':
             send(':deploy\r'); expect('deployments.apps [1]')
             send(':scale 3\r'); expect('Confirm scale')

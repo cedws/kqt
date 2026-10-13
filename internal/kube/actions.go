@@ -189,6 +189,7 @@ func (d *Demo) Delete(ctx context.Context, r Resource, ns, name string, uid type
 				return fmt.Errorf("resource changed")
 			}
 			d.objects = append(d.objects[:i], d.objects[i+1:]...)
+			d.notifyResourcesLocked()
 			return nil
 		}
 	}
@@ -208,5 +209,6 @@ func (d *Demo) Create(ctx context.Context, r Resource, ns string, o unstructured
 	o.SetResourceVersion("1")
 	o.SetCreationTimestamp(metav1.Now())
 	d.objects = append(d.objects, o)
+	d.notifyResourcesLocked()
 	return *o.DeepCopy(), nil
 }

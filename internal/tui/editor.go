@@ -225,6 +225,7 @@ func (m *model) openEditor() tea.Cmd {
 		m.notice = err.Error()
 		return nil
 	}
+	m.stopResourceWatch()
 	m.clearSecret()
 	m.updateInspector()
 	if m.requestCancel != nil {
@@ -256,13 +257,13 @@ func (m *model) editorReady(v editReadyMsg) tea.Cmd {
 	if v.err != nil {
 		m.mode = ""
 		m.notice = "Unable to edit: " + kube.Safe(v.err.Error())
-		return m.fetch()
+		return m.refreshResources()
 	}
 	buffer, err := newEditBuffer(v.original, v.resource, v.backend)
 	if err != nil {
 		m.mode = ""
 		m.notice = "Unable to prepare editor: " + kube.Safe(err.Error())
-		return m.fetch()
+		return m.refreshResources()
 	}
 	m.editBuffer = buffer
 	args, err := editorArgs(editorCommand(m.settings.Config.Editor))
@@ -270,7 +271,7 @@ func (m *model) editorReady(v editReadyMsg) tea.Cmd {
 		buffer.remove()
 		m.mode = ""
 		m.notice = err.Error()
-		return m.fetch()
+		return m.refreshResources()
 	}
 	m.mode = "editing"
 	m.notice = "Editor open · changes apply on successful exit"
@@ -283,7 +284,7 @@ func (m *model) editorClosed(v editorClosedMsg) tea.Cmd {
 	}
 	if v.err != nil {
 		m.editFailure("Editor exited with an error: "+kube.Safe(v.err.Error()), v.buffer.path)
-		return m.fetch()
+		return m.refreshResources()
 	}
 	m.mode = "edit-loading"
 	m.notice = "Applying edited resource…"
@@ -310,7 +311,7 @@ func (m *model) editFinished(v editedMsg) tea.Cmd {
 			m.notice = "Updated " + v.buffer.original.GetKind() + " " + v.buffer.original.GetName()
 		}
 	}
-	return m.fetch()
+	return m.refreshResources()
 }
 
 func (m *model) editFailure(message, path string) {

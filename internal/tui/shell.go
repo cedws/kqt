@@ -238,6 +238,7 @@ func (m *model) runShell() tea.Cmd {
 		m.notice = "Invalid shell command: " + kube.Safe(err.Error())
 		return nil
 	}
+	m.stopResourceWatch()
 	if m.requestCancel != nil {
 		m.requestCancel()
 	}
@@ -263,7 +264,7 @@ func (m *model) shellClosed(v shellClosedMsg) tea.Cmd {
 	if v.err != nil {
 		m.operationError("Shell", v.err)
 	}
-	return m.fetch()
+	return m.refreshResources()
 }
 func (m *model) operationError(action string, err error) {
 	m.mode = "operation-error"

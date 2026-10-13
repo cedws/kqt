@@ -87,6 +87,12 @@ type logsMsg struct {
 }
 
 type model struct {
+	resourceToken                            uint64
+	resourceCancel                           context.CancelFunc
+	resourceContext                          context.Context
+	resourceFeed                             *resourceFeed
+	resourceCache, resourceStaging           map[string]unstructured.Unstructured
+	resourceWatchState, resourceWatchError   string
 	actionToken                              uint64
 	actionCancel                             context.CancelFunc
 	actionPlan                               *kube.ActionPlan
@@ -244,6 +250,7 @@ func (m *model) Init() tea.Cmd {
 	return tea.Batch(m.connect(m.contextName), m.themeTimeout())
 }
 func (m *model) close() {
+	m.stopResourceWatch()
 	m.cancelAction()
 	m.manifestContent = ""
 	m.cancelRelations()
@@ -261,6 +268,7 @@ func (m *model) close() {
 }
 func (m *model) connect(name string) tea.Cmd {
 	m.close()
+	m.resourceWatchError = ""
 	m.generation++
 	m.request++
 	m.busy = true
@@ -387,6 +395,8 @@ func (m *model) poll() tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg { return pollMsg{g, id} })
 }
 func (m *model) navigate(r route, remember bool) tea.Cmd {
+	m.stopResourceWatch()
+	m.resourceWatchError = ""
 	m.cancelAction()
 	m.manifestContent = ""
 	m.cancelRelations()
@@ -617,6 +627,10 @@ func (m *model) loadLogs() tea.Cmd {
 }
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch v := msg.(type) {
+	case resourceBatchMsg:
+		return m, m.resourceBatch(v)
+	case resourceMetricsMsg:
+		return m, m.resourceMetricsReady(v)
 	case actionResultMsg:
 		return m, m.actionResult(v)
 	case manifestSavedMsg:
@@ -691,9 +705,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.usage, m.metricsWarning = v.usage, v.metricsError
 			m.rebuild(key)
 		}
+		if v.err == nil && m.resourceFeed == nil && m.resourceWatchError == "" {
+			return m, tea.Batch(m.startResourceWatch(), m.poll())
+		}
 		return m, m.poll()
 	case pollMsg:
 		if v.generation == m.generation && v.request == m.request {
+			if m.resourceFeed != nil {
+				return m, m.resourceMetrics()
+			}
 			return m, m.fetch()
 		}
 	case secretReadyMsg:

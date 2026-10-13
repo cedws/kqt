@@ -19,7 +19,7 @@ import (
 
 func watchedEvent(name, namespace, subject, version string, count int64) unstructured.Unstructured {
 	return unstructured.Unstructured{Object: map[string]interface{}{
-		"apiVersion": "v1", "kind": "Event", "metadata": map[string]interface{}{"name": name, "namespace": namespace, "uid": name, "resourceVersion": version},
+		"apiVersion": "v1", "kind": "Event", "metadata": map[string]interface{}{"name": name, "namespace": namespace, "uid": name, "resourceVersion": version, "labels": map[string]interface{}{"app": "web"}},
 		"type": "Warning", "reason": "BackOff", "message": "retrying", "count": count, "lastTimestamp": "2026-10-13T15:00:00Z",
 		"involvedObject": map[string]interface{}{"uid": subject, "kind": "Pod", "name": "web"},
 	}}

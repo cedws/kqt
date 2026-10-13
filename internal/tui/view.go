@@ -285,6 +285,9 @@ func (m *model) View() tea.View {
 		if m.dataErr != "" {
 			state = "stale / disconnected"
 		}
+		if m.resourceFeed != nil || m.resourceWatchError != "" {
+			state += " · " + m.resourceWatchLabel()
+		}
 		brand := " kqt  ·  A Kubernetes Query Tool"
 		if m.options.Demo {
 			brand += "  ·  DEMO"
@@ -339,6 +342,9 @@ func (m *model) View() tea.View {
 			status = fmt.Sprintf(" %d/%d resources · sort %s · %s", len(m.visible), len(m.rows), m.sortColumn, m.layout)
 			if !m.lastRefresh.IsZero() {
 				status += " · refreshed " + m.lastRefresh.Format("15:04:05")
+			}
+			if m.route.resource.Kind != "Event" {
+				status += " · " + m.resourceWatchLabel()
 			}
 			token = "muted"
 		}

@@ -119,7 +119,9 @@ If discovery is incomplete, a warning appears and built-in views remain usable.
 clears it. Workload/service Enter follows real selectors; node Enter uses a node
 field selector. Escape restores the parent route and selection.
 
-Tables refresh every two seconds by default, with failure backoff. The connection
+Resource tables follow Kubernetes list/watch streams by default, including
+custom resources. If watching is unavailable, tables visibly fall back to polling
+at the configured interval (two seconds by default), with failure backoff. The connection
 header stays **connected** during healthy background refreshes; **loading** is
 reserved for connection/initial loading. Failed requests retain the last good
 snapshot with a **STALE** label. Context and route changes cancel requests, clear
@@ -384,8 +386,8 @@ inheritance, completion, fuzzy matching, syntax highlighting, theme timing,
 inspector focus, terminal dimensions, and log aggregation. PTY checks cover
 editor terminal handoff/restoration and saved-state restart as well.
 
-Resource relationships beyond workload/service/node-to-pods, dedicated workload
-actions, and informer watches remain future work. Resource refresh uses polling.
+Resource relationships, workload actions and live resource tables are available.
+See the sections below for their controls and behavior.
 See [the design](docs/design.md), [verification](docs/verification.md), and
 [the pod-shell assessment](docs/pod-shell-assessment.md).
 
@@ -430,3 +432,16 @@ are accepted, while changed specifications require a fresh selection. Permission
 is reported separately from controller reconciliation; `S` shows rollout status
 and events. Cancelling a request already in progress does not roll back changes;
 refresh to check its final state.
+
+## Live resource tables
+
+Ordinary resource tables now use Kubernetes list/watch streams. Added, modified
+and deleted objects update the table and inspector while preserving selection.
+Expired watch history triggers a full resync; partial lists never replace the
+last complete snapshot, and resources absent from the new list are removed.
+Reconnection retains visible data and labels stale states. `Ctrl+R` / `:refresh`
+restarts the list/watch. Context and scope changes, editor/shell handoff and quit
+cancel the watch. Metrics continue refreshing independently at the configured
+interval. Watch permission/API failures leave browsing available through a
+labelled polling fallback. Revealed Secret values are hidden when that Secret
+changes; press `x` to fetch and reveal its current values again.
