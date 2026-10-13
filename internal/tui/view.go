@@ -365,7 +365,7 @@ func (m *model) View() tea.View {
 				status += " · resynced; history may have gaps"
 			}
 		}
-		if m.mode == "command" || m.mode == "filter" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "event-search" || m.mode == "event-save" {
+		if m.mode == "command" || m.mode == "filter" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" {
 			status = m.input.View()
 			token = "foreground"
 		}

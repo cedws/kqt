@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Exercise the v0.1 feature workflows through actual terminal input."""
 import argparse
+import base64
+import json
+import re
 import fcntl
 import os
 from pathlib import Path
@@ -69,6 +72,23 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
             send(':pvc\r'); expect('persistentvolumeclaims [1]')
             send('b'); expect('bound volume'); send('\r'); expect('persistentvolumes [1]')
             send('b'); expect('bound claim'); send('\x1b')
+        elif args.feature=='manifest':
+            destination=root/'clean manifest.json'
+            send(':export json clean "'+str(destination)+'"\r'); expect('Manifest saved to')
+            data=json.loads(destination.read_text())
+            assert data['kind']=='Pod' and 'uid' not in data['metadata'] and 'status' not in data
+            assert destination.stat().st_mode & 0o777==0o600
+            send(':export json "'+str(destination)+'"\r'); expect('Unable to save manifest')
+            assert json.loads(destination.read_text())==data
+            send('C'); expect('sent to terminal clipboard')
+            matches=re.findall(rb'\x1b]52;c;([A-Za-z0-9+/=]+)',raw)
+            assert matches and b'kind: Pod' in base64.b64decode(matches[-1]), 'missing manifest clipboard request'
+            send('J'); expect('JSON')
+            send('o'); expect('Save manifest to:')
+            target=root/'panel.json'
+            send('\x01\x0b'+str(target)+'\r'); expect('Manifest saved to')
+            assert json.loads(target.read_text())['kind']=='Pod'
+            send('\x1b')
         else:
             raise AssertionError('unknown feature: '+args.feature)
         send('q')

@@ -63,6 +63,9 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		m.close()
 		return tea.Quit
 	}
+	if m.mode == "manifest-save" {
+		return m.manifestInputKey(msg)
+	}
 	if m.mode == "event-search" || m.mode == "event-save" {
 		return m.eventsInputKey(msg)
 	}
@@ -187,6 +190,10 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		if m.mode == "details" {
 			switch k {
+			case "C":
+				return m.copyManifest(m.manifestFormat(), false)
+			case "o":
+				return m.promptManifestExport()
 			case "x":
 				if o, ok := m.current(); ok && (o.GetKind() == "Pod" || o.GetKind() == "Service") {
 					m.stopResourceForwards()
@@ -250,6 +257,10 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	switch k {
+	case "C":
+		return m.copyManifest(m.manifestFormat(), false)
+	case "o":
+		return m.promptManifestExport()
 	case "j", "down":
 		m.move(1)
 	case "k", "up":
@@ -522,6 +533,10 @@ func (m *model) command(value string) tea.Cmd {
 		return m.selectTheme(t)
 	case "resources", "api":
 		return m.openPicker("resources")
+	case "copy":
+		return m.manifestCommand(arg, true)
+	case "export":
+		return m.manifestCommand(arg, false)
 	case "related", "relations":
 		return m.openRelations()
 	case "layout", "layouts":
@@ -822,6 +837,8 @@ Explore
   :po :deploy :svc    Resource names, kinds, and aliases
   :labels app=web    Kubernetes label selector; :labels clears it
   d                  Describe resource with highlighted YAML
+  C / o              Copy / export selected manifest (also in YAML/JSON)
+  :copy json clean   Copy reusable JSON; :export yaml clean PATH saves YAML
   y / v, J           Open highlighted YAML / JSON
   Inspector: J / y   Switch focused inspector to JSON / YAML
   Details: J / y     Switch open manifest panel to JSON / YAML

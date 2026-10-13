@@ -87,6 +87,7 @@ type logsMsg struct {
 }
 
 type model struct {
+	manifestContent, manifestReturn          string
 	relationToken                            uint64
 	relationCancel                           context.CancelFunc
 	relations                                []kube.Relation
@@ -240,6 +241,7 @@ func (m *model) Init() tea.Cmd {
 	return tea.Batch(m.connect(m.contextName), m.themeTimeout())
 }
 func (m *model) close() {
+	m.manifestContent = ""
 	m.cancelRelations()
 	m.clearSecret()
 	m.updateInspector()
@@ -381,6 +383,7 @@ func (m *model) poll() tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg { return pollMsg{g, id} })
 }
 func (m *model) navigate(r route, remember bool) tea.Cmd {
+	m.manifestContent = ""
 	m.cancelRelations()
 	if remember {
 		old := m.route
@@ -609,6 +612,14 @@ func (m *model) loadLogs() tea.Cmd {
 }
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch v := msg.(type) {
+	case manifestSavedMsg:
+		if v.generation == m.generation {
+			if v.err != nil {
+				m.notice = "Unable to save manifest: " + kube.Safe(v.err.Error())
+			} else {
+				m.notice = "Manifest saved to " + kube.Safe(v.path)
+			}
+		}
 	case relationsMsg:
 		return m, m.relationsReady(v)
 	case relationOpenedMsg:
@@ -758,7 +769,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseWheelMsg:
 		m.mouseWheel(v)
 	default:
-		if m.mode == "command" || m.mode == "filter" || m.mode == "picker" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "event-search" || m.mode == "event-save" {
+		if m.mode == "command" || m.mode == "filter" || m.mode == "picker" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" {
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
 			return m, cmd

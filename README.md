@@ -398,3 +398,18 @@ pods; Deployments expose owned ReplicaSets and CronJobs expose owned Jobs.
 Ingresses link to backend Services, pods link to their node and mounted PVCs,
 and PVCs/PVs link to their bound storage counterpart. Permission failures or
 missing/replaced references leave available links usable and show a warning.
+
+## Copying and exporting manifests
+
+`C` copies the selected manifest using the terminal's OSC52 clipboard support;
+`o` prompts for a private file destination. Both work in YAML/JSON details.
+`:copy yaml`, `:copy json clean`, and `:export json clean "saved manifest.json"`
+choose the format explicitly. The `clean` option removes generated metadata,
+owner references and status while preserving resource specifications. Exported
+files use mode `0600` and never replace an existing file. Clipboard support varies
+by terminal; the notice confirms that the request was sent, and file export is
+available independently. Clipboard requests are limited to 1 MiB.
+
+Secret exports are redacted while values are hidden. After `x` reveals a Secret,
+copy/export uses its original Kubernetes base64 data, rather than the decoded
+inspection form. Hiding values restores redacted exports.

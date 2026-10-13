@@ -281,3 +281,11 @@ selectors, ingress backends, PVC/PV references, cancellation, and obsolete repli
 The demo includes owner chains, ingress, and bound storage fixtures. The full
 race/static/Python checks passed before this feature's commit; a dedicated PTY
 check exercises the picker and navigation through workloads, services and storage.
+
+## v0.1.0: manifest copy and export
+
+Round-trip checks verify YAML/JSON data fidelity, clean metadata/status, source
+immutability, Secret redaction and canonical revealed data. File checks cover
+private permissions, quoted paths, exclusive creation and cancellation. The PTY
+workflow checks a real OSC52 request, reusable JSON, overwrite refusal and export
+from a JSON panel; clipboard acceptance by every terminal remains unqualified.
