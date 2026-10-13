@@ -121,6 +121,7 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	if m.mode != "" {
 		if k == "esc" || k == "q" {
+			m.cancelRelations()
 			if m.mode == "details" {
 				m.clearSecret()
 				m.updateInspector()
@@ -288,6 +289,8 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		m.openDetails(false, true)
 	case "e":
 		return m.openEditor()
+	case "b":
+		return m.openRelations()
 	case "L":
 		return m.openLogs(false)
 	case "P":
@@ -519,6 +522,8 @@ func (m *model) command(value string) tea.Cmd {
 		return m.selectTheme(t)
 	case "resources", "api":
 		return m.openPicker("resources")
+	case "related", "relations":
+		return m.openRelations()
 	case "layout", "layouts":
 		if arg == "" {
 			return m.openPicker("layouts")
@@ -623,6 +628,10 @@ func (m *model) openPicker(kind string) tea.Cmd {
 	m.choices = nil
 	m.pickerIndex = 0
 	switch kind {
+	case "relations":
+		for _, link := range m.relations {
+			m.choices = append(m.choices, choice{link.Key(), link.Title() + " · " + link.Reason})
+		}
 	case "sort":
 		for i, column := range m.columns() {
 			description := "sort ascending"
@@ -747,6 +756,8 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.mode = ""
 		m.input.Blur()
 		switch m.pickerKind {
+		case "relations":
+			return m.selectRelation(c.name)
 		case "sort":
 			m.chooseOrder(c.name)
 		case "shell-containers":
@@ -807,6 +818,7 @@ Explore
   :ns NAME / :ns -A   Set namespace / all namespaces (also 0)
   c / :ctx           Search kubeconfig contexts (session only)
   r / :resources     Search discovered APIs / CRDs
+  b / :related       Browse owners, backends, pods and storage relationships
   :po :deploy :svc    Resource names, kinds, and aliases
   :labels app=web    Kubernetes label selector; :labels clears it
   d                  Describe resource with highlighted YAML

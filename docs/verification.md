@@ -272,3 +272,12 @@ including history recall and draft restoration, pod/service cancellation from
 each supported view, resize replay, terminal restoration, and cleanup on quit.
 Live API checks passed with WebSocket and forced SPDY fallback in a disposable
 Kubernetes v1.36.2+k3s1 cluster; the cluster and its volumes were removed.
+
+## v0.1.0: resource relationships
+
+Relationship contract/model checks cover owner chains and cycles, replaced
+selected resources/owners, namespace boundaries, exact-name navigation, service
+selectors, ingress backends, PVC/PV references, cancellation, and obsolete replies.
+The demo includes owner chains, ingress, and bound storage fixtures. The full
+race/static/Python checks passed before this feature's commit; a dedicated PTY
+check exercises the picker and navigation through workloads, services and storage.

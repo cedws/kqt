@@ -87,6 +87,9 @@ type logsMsg struct {
 }
 
 type model struct {
+	relationToken                            uint64
+	relationCancel                           context.CancelFunc
+	relations                                []kube.Relation
 	forwardDetail                            uint64
 	ctx                                      context.Context
 	settings                                 *Settings
@@ -237,6 +240,7 @@ func (m *model) Init() tea.Cmd {
 	return tea.Batch(m.connect(m.contextName), m.themeTimeout())
 }
 func (m *model) close() {
+	m.cancelRelations()
 	m.clearSecret()
 	m.updateInspector()
 	if m.requestCancel != nil {
@@ -377,6 +381,7 @@ func (m *model) poll() tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg { return pollMsg{g, id} })
 }
 func (m *model) navigate(r route, remember bool) tea.Cmd {
+	m.cancelRelations()
 	if remember {
 		old := m.route
 		if o, ok := m.current(); ok {
@@ -604,6 +609,10 @@ func (m *model) loadLogs() tea.Cmd {
 }
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch v := msg.(type) {
+	case relationsMsg:
+		return m, m.relationsReady(v)
+	case relationOpenedMsg:
+		return m, m.relationOpened(v)
 	case tea.WindowSizeMsg:
 		m.width = max(1, v.Width)
 		m.height = max(1, v.Height)

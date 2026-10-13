@@ -388,3 +388,13 @@ Resource relationships beyond workload/service/node-to-pods, dedicated workload
 actions, and informer watches remain future work. Resource refresh uses polling.
 See [the design](docs/design.md), [verification](docs/verification.md), and
 [the pod-shell assessment](docs/pod-shell-assessment.md).
+
+## Related resources
+
+Press `b` or run `:related` (`:relations`) for a searchable list of related
+resources. Enter follows a link; Escape returns to the previous resource view.
+Owner chains follow immutable owner UIDs. Workloads/services/nodes expose matching
+pods; Deployments expose owned ReplicaSets and CronJobs expose owned Jobs.
+Ingresses link to backend Services, pods link to their node and mounted PVCs,
+and PVCs/PVs link to their bound storage counterpart. Permission failures or
+missing/replaced references leave available links usable and show a warning.

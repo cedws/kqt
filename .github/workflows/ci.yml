@@ -20,3 +20,4 @@ jobs:
       - run: go build -trimpath -o bin/kqt ./cmd/kqt
       - run: python3 scripts/tui-smoke.py
       - run: python3 scripts/operator-smoke.py
+      - run: python3 scripts/features-smoke.py --feature relations

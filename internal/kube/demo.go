@@ -14,6 +14,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -106,6 +107,7 @@ func NewDemo() *Demo {
 		}
 	}
 	add("exploration.kqt.dev/v1", "Widget", "platform", "example", map[string]interface{}{"description": "Discovered custom resource"}, map[string]interface{}{"phase": "Ready"})
+	demoRelationships(d)
 	return d
 }
 func (d *Demo) Resources(context.Context) ([]Resource, error) {
@@ -121,19 +123,17 @@ func (d *Demo) List(ctx context.Context, q Query) ([]unstructured.Unstructured, 
 	if err != nil {
 		return nil, err
 	}
+	fieldSelector, err := fields.ParseSelector(q.Fields)
+	if err != nil {
+		return nil, err
+	}
 	var result []unstructured.Unstructured
 	for _, o := range d.objects {
 		if o.GetKind() != q.Resource.Kind || q.Resource.Namespaced && q.Namespace != "" && o.GetNamespace() != q.Namespace || !selector.Matches(labels.Set(o.GetLabels())) {
 			continue
 		}
-		if q.Fields != "" {
-			if strings.HasPrefix(q.Fields, "involvedObject.uid=") {
-				if strings.TrimPrefix(q.Fields, "involvedObject.uid=") != Text(o, "involvedObject", "uid") {
-					continue
-				}
-			} else if q.Fields != "spec.nodeName="+Text(o, "spec", "nodeName") {
-				continue
-			}
+		if !fieldSelector.Matches(fields.Set{"metadata.name": o.GetName(), "metadata.namespace": o.GetNamespace(), "spec.nodeName": Text(o, "spec", "nodeName"), "involvedObject.uid": Text(o, "involvedObject", "uid")}) {
+			continue
 		}
 		result = append(result, *o.DeepCopy())
 	}

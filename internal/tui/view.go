@@ -241,9 +241,13 @@ func (m *model) pickerView(width, height int) string {
 	start := min(max(0, m.pickerIndex-capacity+1), max(0, len(m.matches)-capacity))
 	for i := start; i < min(len(m.matches), start+capacity); i++ {
 		c := m.matches[i]
-		text := "  " + kube.Safe(c.name) + " · " + kube.Safe(c.description)
+		label := kube.Safe(c.name) + " · " + kube.Safe(c.description)
+		if m.pickerKind == "relations" {
+			label = kube.Safe(c.description)
+		}
+		text := "  " + label
 		if i == m.pickerIndex {
-			text = "› " + kube.Safe(c.name) + " · " + kube.Safe(c.description)
+			text = "› " + label
 			text = lipgloss.NewStyle().Foreground(m.theme.color("selection_foreground")).Background(m.theme.color("selection_background")).Render(fit(text, width-2))
 		}
 		lines = append(lines, text)
@@ -400,7 +404,7 @@ func (m *model) View() tea.View {
 		}
 		lines = append(lines, m.theme.style("muted").Render(fit(help, w)))
 		content = strings.Join(lines, "\n")
-		if m.mode == "picker" || m.mode == "details" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" {
+		if m.mode == "picker" || m.mode == "details" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" || m.mode == "relations-loading" {
 			mw, mh := w-4, h-4
 			modal := ""
 			if m.mode == "picker" {

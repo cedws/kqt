@@ -11,7 +11,7 @@ type completionState struct {
 	index   int
 }
 
-var commandNames = []string{"api", "columns", "context", "contexts", "ctx", "edit", "events", "forward", "forwards", "help", "inspector", "label", "labels", "layout", "layouts", "logs", "metrics", "namespace", "ns", "q", "quit", "refresh", "resources", "shell", "sort", "status", "theme", "themes", "write"}
+var commandNames = []string{"api", "columns", "context", "contexts", "ctx", "edit", "events", "forward", "forwards", "help", "inspector", "label", "labels", "layout", "layouts", "logs", "metrics", "namespace", "ns", "q", "quit", "refresh", "related", "relations", "resources", "shell", "sort", "status", "theme", "themes", "write"}
 
 func (m *model) completeCommand(reverse bool) {
 	value := m.input.Value()

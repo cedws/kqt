@@ -18,6 +18,7 @@ check:
 smoke: build
     python3 scripts/tui-smoke.py --binary bin/kqt
     python3 scripts/operator-smoke.py --binary bin/kqt
+    python3 scripts/features-smoke.py --feature relations
 
 smoke-live: build
     sh scripts/live-smoke.sh
