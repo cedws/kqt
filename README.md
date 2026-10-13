@@ -445,3 +445,19 @@ cancel the watch. Metrics continue refreshing independently at the configured
 interval. Watch permission/API failures leave browsing available through a
 labelled polling fallback. Revealed Secret values are hidden when that Secret
 changes; press `x` to fetch and reveal its current values again.
+
+## Permissions and read-only mode
+
+`A` / `:permissions` (`:access`) shows your API-reported identity and current
+resource permissions, including pod logs, shell and forwarding subresources.
+`:can-i get`, `:can-i patch`, or `:can-i get log` checks one action. Results are
+labelled Allowed, Denied or Unknown; a failed/unavailable review is never treated
+as a denial. Kubernetes admission policies can impose further rules. `Ctrl+R`
+rechecks and Escape closes the panel.
+
+Start with `kqt --read-only` or configure `read_only: true` to disable editing,
+workload operations and pod shells. The header displays **READ ONLY**. Inspection,
+logs/events, permission reviews, clipboard/file exports and port forwarding remain
+available. `--read-only=false` explicitly overrides a configured read-only default
+for that session. This mode restricts kqt's controls; it does not alter your
+Kubernetes credentials or replace cluster authorization.

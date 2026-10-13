@@ -322,3 +322,17 @@ PTY flows passed. A disposable real cluster confirmed watch add/update/delete
 notifications, immediate table updates and live refresh of an open JSON panel.
 The watch indicator remains visible alongside discovery warnings. The test
 cluster and its volumes were removed after qualification.
+
+## v0.1.0: permissions and read-only mode
+
+Native HTTP contracts verify SelfSubjectAccessReview scope/subresources, allowed
+and denied decisions, unavailable/malformed reviews and SelfSubjectReview
+identity. Model tests cover local mutation gates, confirmation rechecks, config/
+flag precedence, usable exports, clear mode labels and obsolete replies. The
+read-only PTY workflow checks the permission panel, blocked edit/action/shell
+commands, a single-action check and a successful private export.
+
+Full race/static checks and the read-only PTY flow passed. A real limited service
+account reported its actual service-account identity, allowed pod reads/listing,
+and denied patch/delete/exec checks in a disposable cluster. Single-action
+refresh preserves its query. The test cluster and volumes were removed.

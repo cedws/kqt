@@ -28,6 +28,9 @@ func actionIdentity(plan *kube.ActionPlan) string {
 	return strings.TrimPrefix(plan.Object.GetNamespace()+"/"+plan.Object.GetName(), "/")
 }
 func (m *model) actionCommand(action, arg string) tea.Cmd {
+	if !m.allowMutation(action) {
+		return nil
+	}
 	o, ok := m.current()
 	if !ok {
 		m.notice = "Select a resource first"
@@ -71,6 +74,9 @@ func (m *model) actionInputKey(v tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	if v.String() == "enter" {
+		if !m.allowMutation("workload actions") {
+			return nil
+		}
 		plan := m.actionPlan
 		if plan == nil || m.input.Value() != actionIdentity(plan) {
 			m.notice = "Type the exact resource name shown to confirm"

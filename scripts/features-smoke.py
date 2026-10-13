@@ -40,6 +40,7 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
     wrapper="import subprocess,sys; rc=subprocess.call(sys.argv[1:]); print('__kqt_exit__'+str(rc),flush=True); sys.stdin.readline(); sys.exit(rc)"
     launch=[str(args.binary.resolve()),'--config',str(config),'-n','kqt-test' if args.kubeconfig else 'default']
     launch += ['--kubeconfig',str(args.kubeconfig.resolve())] if args.kubeconfig else ['--demo']
+    if args.feature=='access': launch += ['--read-only']
     process=subprocess.Popen([sys.executable,'-c',wrapper,*launch],stdin=slave,stdout=slave,stderr=slave,preexec_fn=setup_child,env=dict(os.environ,TERM='xterm-256color',COLORTERM='truecolor'))
     raw=bytearray()
     def pump(duration=0.15):
@@ -74,6 +75,15 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
             send(':pvc\r'); expect('persistentvolumeclaims [1]')
             send('b'); expect('bound volume'); send('\r'); expect('persistentvolumes [1]')
             send('b'); expect('bound claim'); send('\x1b')
+        elif args.feature=='access':
+            expect('READ ONLY')
+            send(':permissions\r'); expect('Permissions'); expect('demo-user'); expect('Allowed'); expect('disabled locally')
+            send('\x1b')
+            for action in ['edit','scale 2','restart','delete','shell']:
+                send(':'+action+'\r'); expect('Read-only mode:')
+            send(':can-i get\r'); expect('Allowed'); send('\x1b')
+            target=root/'readonly.json'; send(':export json "'+str(target)+'"\r'); expect('Manifest saved to')
+            assert json.loads(target.read_text())['kind']=='Pod'
         elif args.feature=='watch':
             expect('live')
             if args.kubeconfig:

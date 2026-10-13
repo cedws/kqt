@@ -212,6 +212,9 @@ func (m *model) cancelEdit() {
 	}
 }
 func (m *model) openEditor() tea.Cmd {
+	if !m.allowMutation("editing") {
+		return nil
+	}
 	o, ok := m.current()
 	if !ok || m.backend == nil {
 		return nil

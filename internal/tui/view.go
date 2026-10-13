@@ -289,6 +289,9 @@ func (m *model) View() tea.View {
 			state += " · " + m.resourceWatchLabel()
 		}
 		brand := " kqt  ·  A Kubernetes Query Tool"
+		if m.options.ReadOnly {
+			brand += " · READ ONLY"
+		}
 		if m.options.Demo {
 			brand += "  ·  DEMO"
 		}
@@ -412,7 +415,7 @@ func (m *model) View() tea.View {
 		}
 		lines = append(lines, m.theme.style("muted").Render(fit(help, w)))
 		content = strings.Join(lines, "\n")
-		if m.mode == "picker" || m.mode == "details" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" || m.mode == "relations-loading" || m.mode == "action-confirm" || m.mode == "action-running" {
+		if m.mode == "picker" || m.mode == "details" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" || m.mode == "relations-loading" || m.mode == "action-confirm" || m.mode == "action-running" || m.mode == "access" || m.mode == "access-loading" {
 			mw, mh := w-4, h-4
 			modal := ""
 			if m.mode == "picker" {

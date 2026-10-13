@@ -11,7 +11,7 @@ type completionState struct {
 	index   int
 }
 
-var commandNames = []string{"actions", "api", "delete", "restart", "resume", "run", "scale", "suspend", "columns", "copy", "context", "contexts", "ctx", "edit", "events", "export", "forward", "forwards", "help", "inspector", "label", "labels", "layout", "layouts", "logs", "metrics", "namespace", "ns", "q", "quit", "refresh", "related", "relations", "resources", "shell", "sort", "status", "theme", "themes", "write"}
+var commandNames = []string{"access", "can-i", "permissions", "actions", "api", "delete", "restart", "resume", "run", "scale", "suspend", "columns", "copy", "context", "contexts", "ctx", "edit", "events", "export", "forward", "forwards", "help", "inspector", "label", "labels", "layout", "layouts", "logs", "metrics", "namespace", "ns", "q", "quit", "refresh", "related", "relations", "resources", "shell", "sort", "status", "theme", "themes", "write"}
 
 func (m *model) completeCommand(reverse bool) {
 	value := m.input.Value()
@@ -60,6 +60,8 @@ func (m *model) completeCommand(reverse bool) {
 						names = append(names, row.GetNamespace())
 					}
 				}
+			case "can-i":
+				names = []string{"get", "list", "watch", "patch", "delete", "create", "get log", "get exec", "create exec", "get portforward", "create portforward"}
 			case "copy", "export":
 				names = []string{"yaml", "json", "clean", "yaml clean", "json clean"}
 			case "inspector":

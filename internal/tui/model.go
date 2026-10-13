@@ -17,6 +17,7 @@ import (
 )
 
 type Options struct {
+	ReadOnly, ReadOnlyExplicit       bool
 	Demo                             bool
 	Context, Namespace, View, Labels string
 	AllNamespaces                    bool
@@ -87,6 +88,9 @@ type logsMsg struct {
 }
 
 type model struct {
+	accessToken                              uint64
+	accessCancel                             context.CancelFunc
+	accessScope, accessQuery                 string
 	resourceToken                            uint64
 	resourceCancel                           context.CancelFunc
 	resourceContext                          context.Context
@@ -183,6 +187,9 @@ type model struct {
 }
 
 func newModel(ctx context.Context, s *Settings, o Options, l *kube.Loader) (*model, error) {
+	if !o.ReadOnlyExplicit {
+		o.ReadOnly = s.Config.ReadOnly
+	}
 	m := &model{ctx: ctx, settings: s, options: o, loader: l, resources: kube.Builtins(), theme: s.Themes[s.Config.Theme], layout: s.Config.Layout, width: 80, height: 24, sortColumn: "name"}
 	m.inspectorFormat = s.Config.InspectorFormat
 	m.themeUntil, m.themeTimer = time.Now().Add(10*time.Second), 1
@@ -250,6 +257,7 @@ func (m *model) Init() tea.Cmd {
 	return tea.Batch(m.connect(m.contextName), m.themeTimeout())
 }
 func (m *model) close() {
+	m.cancelAccess()
 	m.stopResourceWatch()
 	m.cancelAction()
 	m.manifestContent = ""
@@ -395,6 +403,7 @@ func (m *model) poll() tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg { return pollMsg{g, id} })
 }
 func (m *model) navigate(r route, remember bool) tea.Cmd {
+	m.cancelAccess()
 	m.stopResourceWatch()
 	m.resourceWatchError = ""
 	m.cancelAction()
@@ -627,6 +636,8 @@ func (m *model) loadLogs() tea.Cmd {
 }
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch v := msg.(type) {
+	case accessMsg:
+		m.accessReady(v)
 	case resourceBatchMsg:
 		return m, m.resourceBatch(v)
 	case resourceMetricsMsg:

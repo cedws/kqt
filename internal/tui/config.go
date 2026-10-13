@@ -46,6 +46,7 @@ type config struct {
 	Editor          string                   `toml:"editor,omitempty" yaml:"editor,omitempty"`
 	Shell           string                   `toml:"shell,omitempty" yaml:"shell,omitempty"`
 	CommandHistory  []string                 `toml:"command_history,omitempty" yaml:"command_history,omitempty"`
+	ReadOnly        bool                     `toml:"read_only,omitempty" yaml:"read_only,omitempty"`
 	Views           map[string]viewConfig    `toml:"views,omitempty" yaml:"views,omitempty"`
 	Layouts         map[string]layoutProfile `toml:"layouts,omitempty" yaml:"layouts,omitempty"`
 	Contexts        map[string]contextState  `toml:"contexts,omitempty" yaml:"contexts,omitempty"`
@@ -286,6 +287,7 @@ namespace: default
 all_namespaces: false
 inspector_format: yaml
 refresh_interval: 2s
+# read_only: true # disables resource changes and shells
 # editor: "code --wait" # default: $EDITOR, then $VISUAL, then vi
 # shell: "/bin/sh" # command inside the selected running container
 

@@ -200,6 +200,9 @@ func (m *model) cancelShell() {
 	}
 }
 func (m *model) openShell() tea.Cmd {
+	if !m.allowMutation("shells") {
+		return nil
+	}
 	o, ok := m.current()
 	if !ok {
 		return nil
@@ -225,6 +228,9 @@ func (m *model) openShell() tea.Cmd {
 	return m.runShell()
 }
 func (m *model) runShell() tea.Cmd {
+	if !m.allowMutation("shells") {
+		return nil
+	}
 	if !slices.Contains(kube.RunningContainers(m.shellObject), m.shellContainer) {
 		m.notice = "Selected container is not running"
 		return nil

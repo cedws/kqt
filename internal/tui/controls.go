@@ -130,7 +130,11 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	if m.mode != "" {
+		if (m.mode == "access" || m.mode == "access-loading") && k == "ctrl+r" {
+			return m.openAccess(m.accessQuery)
+		}
 		if k == "esc" || k == "q" {
+			m.cancelAccess()
 			m.cancelRelations()
 			if m.mode == "details" {
 				m.clearSecret()
@@ -264,6 +268,8 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	switch k {
+	case "A":
+		return m.openAccess("")
 	case "a":
 		return m.openPicker("actions")
 	case "D":
@@ -546,6 +552,10 @@ func (m *model) command(value string) tea.Cmd {
 		return m.openPicker("resources")
 	case "actions":
 		return m.openPicker("actions")
+	case "permissions", "access":
+		return m.openAccess("")
+	case "can-i":
+		return m.openAccess(arg)
 	case "scale", "restart", "suspend", "resume", "run", "delete":
 		return m.actionCommand(cmd, arg)
 	case "copy":
@@ -661,7 +671,11 @@ func (m *model) openPicker(kind string) tea.Cmd {
 	case "actions":
 		if o, ok := m.current(); ok {
 			for _, action := range kube.Actions(o.GetKind()) {
-				m.choices = append(m.choices, choice{action, "requires confirmation"})
+				description := "requires confirmation"
+				if m.options.ReadOnly {
+					description = "disabled in read-only mode"
+				}
+				m.choices = append(m.choices, choice{action, description})
 			}
 		}
 	case "relations":
@@ -859,6 +873,8 @@ Explore
   b / :related       Browse owners, backends, pods and storage relationships
   a / :actions       Scale/restart workloads; suspend/resume/run CronJobs
   D / :delete        Confirm deletion of the selected resource
+  A / :permissions   Inspect identity and resource permissions
+  :can-i VERB        Check a selected resource action (optional subresource)
   :po :deploy :svc    Resource names, kinds, and aliases
   :labels app=web    Kubernetes label selector; :labels clears it
   d                  Describe resource with highlighted YAML

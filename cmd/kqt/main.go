@@ -31,6 +31,7 @@ func command() *cobra.Command {
 	f.StringVar(&theme, "theme", "", "Terminal color theme")
 	f.StringVar(&layout, "layout", "", "Saved layout name (kqt config shows an example)")
 	f.BoolVar(&o.Demo, "demo", false, "Explore an offline sample cluster")
+	f.BoolVar(&o.ReadOnly, "read-only", false, "Disable resource changes and shells (overrides read_only config)")
 	cmd.MarkFlagsMutuallyExclusive("namespace", "all-namespaces")
 	settings := func() (*tui.Settings, error) {
 		s, err := tui.LoadSettings(config)
@@ -49,6 +50,7 @@ func command() *cobra.Command {
 		return s, nil
 	}
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		o.ReadOnlyExplicit = cmd.Flags().Changed("read-only")
 		o.ScopeExplicit = cmd.Flags().Changed("namespace") || cmd.Flags().Changed("all-namespaces")
 		s, err := settings()
 		if err != nil {
