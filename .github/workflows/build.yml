@@ -8,9 +8,41 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
 jobs:
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Validate SemVer tag or use development version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            python3 scripts/release_version.py "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            printf 'version=dev-%s\nprerelease=false\n' "${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          fi
+
+  check:
+    name: Release checks
+    needs: version
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    uses: ./.github/workflows/ci.yml
+
   build:
     name: ${{ matrix.goos }} / ${{ matrix.goarch }}
+    needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -33,16 +65,13 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: '0'
           GOTOOLCHAIN: local
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
-          version="dev-${GITHUB_SHA::12}"
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            version="$GITHUB_REF_NAME"
-          fi
           package="kqt-${GOOS}-${GOARCH}"
           directory="artifacts/$package"
           mkdir -p "$directory/internal/tui/licenses" "$directory/docs/screenshots"
-          go build -trimpath -ldflags "-s -w -X main.version=$version" -o "$directory/kqt" ./cmd/kqt
+          go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "$directory/kqt" ./cmd/kqt
           cp README.md "$directory/README.md"
           cp internal/tui/THEMES.md "$directory/internal/tui/THEMES.md"
           cp internal/tui/licenses/*.txt "$directory/internal/tui/licenses/"
@@ -60,3 +89,49 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 30
+
+  release:
+    name: Publish release
+    needs: [version, check, build]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download all four binary packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: kqt-*
+          path: release
+          merge-multiple: true
+      - name: Verify packages and collect checksums
+        shell: bash
+        working-directory: release
+        run: |
+          set -euo pipefail
+          for platform in darwin-amd64 darwin-arm64 linux-amd64 linux-arm64; do
+            test -s "kqt-$platform.tar.gz"
+            sha256sum --check "kqt-$platform.tar.gz.sha256"
+            tar -tzf "kqt-$platform.tar.gz" > /dev/null
+          done
+          cat kqt-*.tar.gz.sha256 > SHA256SUMS
+          sha256sum --check SHA256SUMS
+      - name: Create GitHub release with binaries
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.version.outputs.version }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          flags=()
+          if [[ "$PRERELEASE" == "true" ]]; then
+            flags+=(--prerelease --latest=false)
+          fi
+          gh release create "$RELEASE_TAG" \
+            release/kqt-*.tar.gz release/kqt-*.tar.gz.sha256 release/SHA256SUMS \
+            --verify-tag --title "kqt $RELEASE_TAG" --generate-notes \
+            --notes 'macOS and Linux binaries are available for amd64 and arm64. Each archive includes kqt, the README, screenshots, and theme license notices. Verify downloads using SHA256SUMS or the individual .sha256 files.' \
+            "${flags[@]}"

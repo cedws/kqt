@@ -13,6 +13,7 @@ demo:
 check:
     mise exec -- go test -race ./...
     mise exec -- go vet ./...
+    python3 -m unittest discover -s scripts -p '*_test.py'
 
 smoke: build
     python3 scripts/tui-smoke.py --binary bin/kqt

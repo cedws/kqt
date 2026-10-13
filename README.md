@@ -30,8 +30,12 @@ With mise and just, use `just build`, `just demo`, and `just check`.
 ## Binary builds
 
 The **Build binaries** GitHub workflow runs on pushes (including tags), pull
-requests, and manual dispatch. Download the matching artifact from the workflow
-run's **Artifacts** section:
+requests, and manual dispatch. Pushing a [SemVer](https://semver.org/) tag such as
+`v0.0.1` creates a [GitHub release](https://github.com/z0mbix/kqt/releases) after
+the tests and all four builds pass. Tags with prerelease identifiers, such as
+`v0.1.0-rc.1`, create prereleases. Invalid version tags fail before building.
+Download the matching release archive, or use the workflow run's **Artifacts**
+section for development builds:
 
 | Platform | Artifact |
 | --- | --- |
@@ -43,7 +47,10 @@ run's **Artifacts** section:
 Each artifact contains a `.tar.gz` archive and its `.sha256` checksum file. The
 archive includes the executable, README, and theme license notices. Extract it
 and run the `kqt` executable inside, or copy it onto your PATH. Artifacts are kept
-for 30 days. These are workflow downloads; releases are not published automatically.
+for 30 days; release downloads remain attached to their version. Releases also
+include a combined `SHA256SUMS` file. From the download directory, verify the
+chosen archive with `shasum -a 256 -c kqt-darwin-arm64.tar.gz.sha256` (adjust the
+platform as needed).
 Tag builds report the tag as their version; other builds report `dev-<commit>`.
 All four targets are cross-compiled on Linux with CGO disabled.
 
