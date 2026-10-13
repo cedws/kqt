@@ -413,9 +413,12 @@ func (m *model) View() tea.View {
 		} else if m.eventGlobal && m.mode == "" && !m.inspectorFocused {
 			help = " Space pause  / filter  o save  G follow  0 all namespaces  : command  q quit"
 		}
+		if m.mode == "overview" {
+			help = " j/k scroll  G/g ends  Enter explore problems  0 all namespaces  n namespaces  Ctrl+R reload  Esc close"
+		}
 		lines = append(lines, m.theme.style("muted").Render(fit(help, w)))
 		content = strings.Join(lines, "\n")
-		if m.mode == "picker" || m.mode == "details" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" || m.mode == "relations-loading" || m.mode == "action-confirm" || m.mode == "action-running" || m.mode == "access" || m.mode == "access-loading" {
+		if m.mode == "picker" || m.mode == "details" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" || m.mode == "relations-loading" || m.mode == "action-confirm" || m.mode == "action-running" || m.mode == "access" || m.mode == "access-loading" || m.mode == "overview" {
 			mw, mh := w-4, h-4
 			modal := ""
 			if m.mode == "picker" {

@@ -130,10 +130,28 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	if m.mode != "" {
+		if m.mode == "overview" {
+			switch k {
+			case "ctrl+r":
+				return m.openOverview()
+			case "enter":
+				return m.overviewProblems()
+			case "0":
+				m.options.Namespace = ""
+				m.options.AllNamespaces = true
+				r := m.route
+				r.namespace = ""
+				cmd := m.navigate(r, false)
+				return tea.Batch(cmd, m.openOverview())
+			case "n":
+				return m.changeResource("namespaces", true)
+			}
+		}
 		if (m.mode == "access" || m.mode == "access-loading") && k == "ctrl+r" {
 			return m.openAccess(m.accessQuery)
 		}
 		if k == "esc" || k == "q" {
+			m.cancelOverview()
 			m.cancelAccess()
 			m.cancelRelations()
 			if m.mode == "details" {
@@ -268,6 +286,8 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	switch k {
+	case "U":
+		return m.openOverview()
 	case "A":
 		return m.openAccess("")
 	case "a":
@@ -554,6 +574,8 @@ func (m *model) command(value string) tea.Cmd {
 		return m.openPicker("actions")
 	case "permissions", "access":
 		return m.openAccess("")
+	case "overview":
+		return m.openOverview()
 	case "can-i":
 		return m.openAccess(arg)
 	case "scale", "restart", "suspend", "resume", "run", "delete":
@@ -874,6 +896,7 @@ Explore
   a / :actions       Scale/restart workloads; suspend/resume/run CronJobs
   D / :delete        Confirm deletion of the selected resource
   A / :permissions   Inspect identity and resource permissions
+  U / :overview      Cluster health, capacity, usage and recent warnings
   :can-i VERB        Check a selected resource action (optional subresource)
   :po :deploy :svc    Resource names, kinds, and aliases
   :labels app=web    Kubernetes label selector; :labels clears it

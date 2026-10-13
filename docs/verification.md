@@ -336,3 +336,25 @@ Full race/static checks and the read-only PTY flow passed. A real limited servic
 account reported its actual service-account identity, allowed pod reads/listing,
 and denied patch/delete/exec checks in a disposable cluster. Single-action
 refresh preserves its query. The test cluster and volumes were removed.
+
+## v0.1.0: cluster overview
+
+Overview checks cover namespace/all-namespace counts, failing pods and rollout
+progress, node pressure, exact quantity aggregation, sample coverage and partial
+permission failures. Missing sections and metrics stay unavailable instead of
+becoming healthy zero values. The UI checks cover rendering, problem navigation,
+refresh and obsolete replies. The summary uses bounded parallel reads and a
+five-second minimum refresh interval, independent of resource-table watches.
+
+Overview race/static and terminal checks passed. Real-cluster qualification
+verified pod/workload/node counts and reported allocatable quantities; a limited
+reader retained allowed pod data while node and workload sections were marked
+unavailable. Both test identities used a disposable cluster, which was removed.
+
+Final v0.1.0 qualification passed the full race/static/Python suite, all six
+feature PTY workflows, three demo layouts and restart checks. The complete
+real-cluster run passed existing API/operator/editor/layout tests, native shell
+and forward cleanup, external watch-driven table/JSON updates, limited-reader
+permission and overview checks, and workload mutations. Its disposable cluster,
+network and volumes were removed. FreeBSD/Linux runtime and terminal clipboard
+acceptance remain platform-specific qualification limits.

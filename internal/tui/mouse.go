@@ -97,7 +97,7 @@ func (m *model) mouseWheel(v tea.MouseWheelMsg) {
 	}
 	if m.mode != "" {
 		switch m.mode {
-		case "details", "help", "forward-details", "edit-error", "operation-error":
+		case "details", "help", "forward-details", "edit-error", "operation-error", "overview", "access":
 			if !(paneBounds{2, 2, m.width - 4, m.height - 4}).interior(v.X, v.Y) {
 				return
 			}

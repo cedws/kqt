@@ -23,7 +23,8 @@ References: [k9s](https://k9scli.io/),
   explicit, cancel requests, clear data, and restore that context's view/scope.
 - Async results carry session/request tokens. Obsolete list, log, and editor
   results are discarded. Only one list request runs for a route at a time.
-- Bounded polling defaults to two seconds with error backoff. The connection
+- Resource tables use paginated list/watch streams, with labelled polling
+  fallback when watch access is unavailable. The connection
   label reflects health, not every polling request's transient busy flag.
   Failed refreshes keep the last good snapshot and visibly mark it stale.
 - Discovery includes listable preferred resources and CRDs, with built-in
@@ -194,9 +195,10 @@ are excluded. Compare with the editable source and perform no write if unchanged
 Otherwise send a minimal merge patch with original UID/resourceVersion
 preconditions. Kubernetes supplies schema validation and authorization. Keep the
 file on failure/conflict; delete it on success or an unchanged edit. Resume the
-resource table and polling after return.
+resource table and its watch after return.
 
-Editing remains the resource mutation action, and an explicit shell can change
-container state. Informer watches, deeper resource relationships, and dedicated
-workload actions remain future work. Qualification uses backend contract tests,
+Editing and confirmed workload actions can mutate resources; explicit shells
+can change container state. Read-only mode blocks these paths locally. Resource
+relationships, generic watches, permission reviews, manifest exports and the
+cluster overview are implemented. Qualification uses backend contract tests,
 model tests, and PTY checks against demo and a disposable real Kubernetes cluster.

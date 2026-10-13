@@ -40,3 +40,9 @@ kubectl --kubeconfig "$test_root/config" apply -f "$test_root/event.json"
 KQT_LIVE_KUBECONFIG="$test_root/config" go test -race ./internal/kube -run '^TestLiveOperator$' -v -count=1 -timeout=4m
 python3 scripts/tui-smoke.py --kubeconfig "$test_root/config" "$@"
 python3 scripts/operator-smoke.py --kubeconfig "$test_root/config"
+# Run mutation qualification last so short-lived terminating pods cannot affect
+# the baseline operator/overview fixture counts.
+python3 scripts/features-smoke.py --feature watch --kubeconfig "$test_root/config"
+for feature in TestLiveResources TestLiveAccess TestLiveOverview TestLiveActions; do
+    KQT_LIVE_KUBECONFIG="$test_root/config" go test -race ./internal/kube -run "^${feature}$" -v -count=1 -timeout=2m
+done

@@ -31,7 +31,7 @@ With mise and just, use `just build`, `just demo`, and `just check`.
 
 The **Build binaries** GitHub workflow runs on pushes (including tags), pull
 requests, and manual dispatch. Pushing a [SemVer](https://semver.org/) tag such as
-`v0.0.2` creates a [GitHub release](https://github.com/z0mbix/kqt/releases) after
+`v0.1.0` creates a [GitHub release](https://github.com/z0mbix/kqt/releases) after
 the tests and all six builds pass. Tags with prerelease identifiers, such as
 `v0.1.0-rc.1`, create prereleases. Invalid version tags fail before building.
 Download the matching release archive, or use the workflow run's **Artifacts**
@@ -78,6 +78,11 @@ picker opens. UI preferences never silently select a different Kubernetes contex
 | `c`, `:ctx` | Search and switch kubeconfig contexts |
 | `r`, `:resources` | Search APIs and discovered custom resources |
 | `Enter` | Workload/service/node → pods; otherwise describe |
+| `b`, `:related` | Explore owner, backend, pod and storage relationships |
+| `C`, `o`, `:copy`, `:export` | Copy or privately save YAML/JSON; optional clean form |
+| `a`, `:actions`; `D`, `:delete` | Confirm a workload action or resource deletion |
+| `A`, `:permissions`, `:can-i` | Inspect current identity and permissions |
+| `U`, `:overview` | Cluster health, capacity, usage and warnings |
 | `d`, `y` / `v`, `J` | Describe, highlighted YAML, highlighted JSON |
 | `Tab`, then `J` / `y` | Focus inspector, then switch it to JSON / YAML |
 | `x` on a Secret | Toggle decoded values in the inspector or details |
@@ -461,3 +466,16 @@ logs/events, permission reviews, clipboard/file exports and port forwarding rema
 available. `--read-only=false` explicitly overrides a configured read-only default
 for that session. This mode restricts kqt's controls; it does not alter your
 Kubernetes credentials or replace cluster authorization.
+
+## Cluster overview
+
+`U` / `:overview` opens cluster health, workload counts, node pressure and
+allocatable capacity, observed CPU/memory usage, unhealthy resources and the ten
+most recent warning events. Workload/event scope follows the current namespace;
+node capacity and usage are labelled as cluster-wide. Missing permissions or
+metrics are shown as unavailable, with sample coverage reported for usage totals.
+
+The summary refreshes automatically every five seconds or the configured interval
+if longer. `Ctrl+R` reloads, `0` switches to all namespaces, `n` opens namespace
+selection, and Enter opens a searchable list of unhealthy resources to explore.
+Use arrows or the mouse wheel to scroll; Escape returns to the resource table.

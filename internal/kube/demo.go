@@ -47,7 +47,7 @@ func NewDemo() *Demo {
 		add("v1", "Namespace", "", ns, nil, map[string]interface{}{"phase": "Active"})
 	}
 	for i := 1; i <= 3; i++ {
-		add("v1", "Node", "", fmt.Sprintf("worker-%d", i), nil, map[string]interface{}{"conditions": []interface{}{map[string]interface{}{"type": "Ready", "status": "True"}}, "nodeInfo": map[string]interface{}{"kubeletVersion": "v1.36.0", "architecture": "arm64", "operatingSystem": "linux"}})
+		add("v1", "Node", "", fmt.Sprintf("worker-%d", i), nil, map[string]interface{}{"conditions": []interface{}{map[string]interface{}{"type": "Ready", "status": "True"}}, "nodeInfo": map[string]interface{}{"kubeletVersion": "v1.36.0", "architecture": "arm64", "operatingSystem": "linux"}, "allocatable": map[string]interface{}{"cpu": "4", "memory": "8Gi"}})
 	}
 	for i := 0; i < 24; i++ {
 		ns, app := "default", "web"

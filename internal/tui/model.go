@@ -88,6 +88,10 @@ type logsMsg struct {
 }
 
 type model struct {
+	overviewToken                            uint64
+	overviewContext                          context.Context
+	overviewCancel                           context.CancelFunc
+	overview                                 kube.Overview
 	accessToken                              uint64
 	accessCancel                             context.CancelFunc
 	accessScope, accessQuery                 string
@@ -257,6 +261,7 @@ func (m *model) Init() tea.Cmd {
 	return tea.Batch(m.connect(m.contextName), m.themeTimeout())
 }
 func (m *model) close() {
+	m.cancelOverview()
 	m.cancelAccess()
 	m.stopResourceWatch()
 	m.cancelAction()
@@ -403,6 +408,7 @@ func (m *model) poll() tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg { return pollMsg{g, id} })
 }
 func (m *model) navigate(r route, remember bool) tea.Cmd {
+	m.cancelOverview()
 	m.cancelAccess()
 	m.stopResourceWatch()
 	m.resourceWatchError = ""
@@ -636,6 +642,12 @@ func (m *model) loadLogs() tea.Cmd {
 }
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch v := msg.(type) {
+	case overviewMsg:
+		return m, m.overviewReady(v)
+	case overviewTickMsg:
+		if v.generation == m.generation && v.token == m.overviewToken && m.mode == "overview" {
+			return m, m.fetchOverview()
+		}
 	case accessMsg:
 		m.accessReady(v)
 	case resourceBatchMsg:

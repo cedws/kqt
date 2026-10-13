@@ -75,6 +75,13 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
             send(':pvc\r'); expect('persistentvolumeclaims [1]')
             send('b'); expect('bound volume'); send('\r'); expect('persistentvolumes [1]')
             send('b'); expect('bound claim'); send('\x1b')
+        elif args.feature=='overview':
+            send('U'); expect('Cluster overview'); expect('Health')
+            send('G'); expect('Recent warning events'); expect('BackOff')
+            send('g'); expect('Node capacity')
+            send('0'); expect('all namespaces'); expect('26 total')
+            send('\r'); expect('Relations'); expect('CrashLoopBackOff'); send('\x1b')
+            send(':overview\r'); expect('Cluster overview'); send('\x12'); expect('Health'); send('\x1b')
         elif args.feature=='access':
             expect('READ ONLY')
             send(':permissions\r'); expect('Permissions'); expect('demo-user'); expect('Allowed'); expect('disabled locally')
