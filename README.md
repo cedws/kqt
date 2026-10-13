@@ -22,6 +22,28 @@ go build -trimpath -o bin/ket ./cmd/ket
 
 With mise and just, use `just build`, `just demo`, and `just check`.
 
+## Binary builds
+
+The **Build binaries** GitHub workflow runs on pushes (including tags), pull
+requests, and manual dispatch. Download the matching artifact from the workflow
+run's **Artifacts** section:
+
+| Platform | Artifact |
+| --- | --- |
+| macOS Intel | `ket-darwin-amd64` |
+| macOS Apple Silicon | `ket-darwin-arm64` |
+| Linux x86-64 | `ket-linux-amd64` |
+| Linux ARM64 | `ket-linux-arm64` |
+
+Each artifact contains a `.tar.gz` archive and its `.sha256` checksum file. The
+archive includes the executable, README, and theme license notices. Extract it
+and run the `ket` executable inside, or copy it onto your PATH. Artifacts are kept
+for 30 days. These are workflow downloads; releases are not published automatically.
+Tag builds report the tag as their version; other builds report `dev-<commit>`.
+All four targets are cross-compiled on Linux with CGO disabled.
+
+## Kubernetes connection
+
 `--kubeconfig` selects one kubeconfig file. Otherwise Kubernetes's normal
 `KUBECONFIG` merging or `~/.kube/config` loading applies. `--context` overrides
 current-context for this session; ket never rewrites kubeconfig. Exec credential

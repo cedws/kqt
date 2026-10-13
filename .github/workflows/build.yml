@@ -1,0 +1,61 @@
+name: Build binaries
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.goos }} / ${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [darwin, linux]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Build and package
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+          GOTOOLCHAIN: local
+        run: |
+          set -euo pipefail
+          version="dev-${GITHUB_SHA::12}"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="$GITHUB_REF_NAME"
+          fi
+          package="ket-${GOOS}-${GOARCH}"
+          directory="artifacts/$package"
+          mkdir -p "$directory/internal/tui/licenses"
+          go build -trimpath -ldflags "-s -w -X main.version=$version" -o "$directory/ket" ./cmd/ket
+          cp README.md "$directory/README.md"
+          cp internal/tui/THEMES.md "$directory/internal/tui/THEMES.md"
+          cp internal/tui/licenses/*.txt "$directory/internal/tui/licenses/"
+          tar -C artifacts -czf "artifacts/$package.tar.gz" "$package"
+          cd artifacts
+          sha256sum "$package.tar.gz" > "$package.tar.gz.sha256"
+      - name: Upload binary archive and checksum
+        uses: actions/upload-artifact@v7
+        with:
+          name: ket-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            artifacts/ket-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+            artifacts/ket-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
