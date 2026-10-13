@@ -200,6 +200,23 @@ sys.exit(code)
             expect('kqt-test' if args.kubeconfig else 'web-7c9f6d8b5-0000')
             snapshot('pods')
             assert b'38;2;' in raw or b'38;5;' in raw, 'theme colors absent'
+            # SGR mouse press/release: a release must not toggle order again.
+            header = screen(raw, width, height).splitlines()[5]
+            column_x = header.index('NAME') + 1
+            send(f'\x1b[<0;{column_x};6M\x1b[<0;{column_x};6m'.encode())
+            assert 'NAME ↓' in screen(raw, width, height).splitlines()[5], 'header click did not sort descending'
+            send(b'R')
+            assert 'NAME ↑' in screen(raw, width, height).splitlines()[5], 'R did not reverse'
+            send(b'O')
+            assert 'READY ↑' in screen(raw, width, height).splitlines()[5], 'O did not cycle to the next column'
+            send(b'\x1b[1;2C') # Shift+Right sorts next visible column.
+            assert 'STATUS ↑' in screen(raw, width, height).splitlines()[5], 'keyboard column sort failed'
+            send(b'\x1b[1;2D'); send(b'\x1b[1;2D')
+            assert 'NAME ↑' in screen(raw, width, height).splitlines()[5], 'keyboard name sort failed'
+            send(b':sort\r'); expect('Sort'); send(b'restarts\r')
+            assert 'RESTARTS' in screen(raw, width, height).splitlines()[5], 'sort picker failed'
+            send(b':sort name asc\r')
+            assert b'\x1b[?1002h' in raw, 'mouse reporting was not enabled'
             if args.kubeconfig:
                 send(b'/kqt-log-fixture\r'); expect('pods [1]'); send(b'e'); expect('Updated Pod'); send(b'y'); expect('YAML'); expect('kqt-log-fixture'); expect('kqt.dev/editor-tested'); snapshot('yaml')
                 send(b'\x1b'); pump(0.4)
@@ -220,7 +237,7 @@ sys.exit(code)
                 send(b'\x1b'); pump(0.4); expect('pods [12]')
                 send(b'/web0003\r'); expect('pods [1]'); expect('web-7c9f6d8b5-0003')
                 send(b'\x1b'); pump(0.4); expect('pods [12]'); send(b'g')
-                send(b'E'); expect('Status & Events'); expect('Containers')
+                send(b'S'); expect('Status & Events'); expect('Containers')
                 send(b'G'); expect('Back-off restarting'); send(b'g'); expect('Pod IP')
                 send(b'\x12'); expect('Containers'); send(b'\x1b'); pump(0.4)
                 yaml_start = len(raw)

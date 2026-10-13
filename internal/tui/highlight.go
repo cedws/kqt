@@ -78,6 +78,9 @@ func (m *model) setTheme(t theme) {
 	if m.showingLogs() && !m.logPaused {
 		m.renderLogs()
 	}
+	if m.showingEventPanel() && !m.eventPaused {
+		m.renderEventPanel()
+	}
 }
 
 var jsonTokens = regexp.MustCompile(`"(?:[^"\\]|\\.)*"|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|true|false|null|[{}\[\]:,]`)

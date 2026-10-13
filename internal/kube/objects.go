@@ -166,6 +166,21 @@ func Age(o unstructured.Unstructured) string {
 	}
 }
 func Column(o unstructured.Unstructured, id string) string {
+	if o.GetKind() == "Event" {
+		switch id {
+		case "lastseen":
+			if timestamp := EventTime(o); !timestamp.IsZero() {
+				return timestamp.UTC().Format("2006-01-02 15:04:05")
+			}
+			return "—"
+		case "object":
+			return strings.Trim(EventSubject(o, "kind")+"/"+EventSubject(o, "name"), "/")
+		case "count":
+			return fmt.Sprint(EventCount(o))
+		case "message":
+			return EventMessage(o)
+		}
+	}
 	switch id {
 	case "name":
 		return o.GetName()
@@ -277,7 +292,7 @@ func DefaultColumns(kind string) []string {
 	case "Service":
 		return append(base, "type", "ip", "ports", "age")
 	case "Event":
-		return append(base, "type", "reason", "message", "age")
+		return []string{"namespace", "lastseen", "type", "object", "reason", "count", "message"}
 	case "Node", "Namespace", "PersistentVolume":
 		return []string{"name", "status", "age"}
 	default:

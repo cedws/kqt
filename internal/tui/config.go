@@ -206,7 +206,7 @@ func validColumn(s string) bool {
 	if strings.HasPrefix(s, "/") {
 		return len(s) <= 256 && !strings.ContainsAny(s, "\n\r\x1b") && !regexp.MustCompile(`~([^01]|$)`).MatchString(s)
 	}
-	return slices.Contains([]string{"name", "namespace", "kind", "status", "age", "ready", "restarts", "node", "ip", "type", "ports", "labels", "reason", "message", "cpu", "memory", "cpu%", "memory%"}, s)
+	return slices.Contains([]string{"name", "namespace", "kind", "status", "age", "ready", "restarts", "node", "ip", "type", "ports", "labels", "reason", "message", "lastseen", "object", "count", "cpu", "memory", "cpu%", "memory%"}, s)
 }
 func cloneViews(values map[string]viewConfig) map[string]viewConfig {
 	r := map[string]viewConfig{}

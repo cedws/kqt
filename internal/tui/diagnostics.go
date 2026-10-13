@@ -33,6 +33,8 @@ func (m *model) openEvents() tea.Cmd {
 }
 func (m *model) loadEvents() tea.Cmd {
 	m.closeEvents()
+	m.eventStore = newEventBuffer()
+	m.eventState = "connecting"
 	m.mode = "events"
 	m.resize()
 	m.panel.SoftWrap = true
@@ -64,6 +66,13 @@ func (m *model) closeEvents() {
 		m.eventCancel()
 		m.eventCancel = nil
 	}
+	m.eventContext = nil
+	m.eventFeed = nil
+	m.eventStore = nil
+	m.eventRemoved = nil
+	m.eventGlobal, m.eventPaused, m.eventTail = false, false, false
+	m.eventState, m.eventError, m.eventStatusError, m.eventSearch = "", "", "", ""
+	m.eventDropped, m.eventGaps = 0, 0
 }
 func (m *model) toggleMetrics() tea.Cmd {
 	m.notice = ""
@@ -150,6 +159,16 @@ func (m *model) metricValue(o unstructured.Unstructured, c string) (float64, boo
 }
 func (m *model) column(o unstructured.Unstructured, c string) string {
 	if !metricColumn(c) {
+		if c == "type" && o.GetKind() == "Event" && m.eventStore != nil {
+			removed := m.eventRemoved[kube.Identity(o)]
+			if !m.eventGlobal {
+				entry := m.eventStore.items[kube.Identity(o)]
+				removed = entry != nil && entry.deleted
+			}
+			if removed {
+				return kube.Column(o, c) + " (removed)"
+			}
+		}
 		return kube.Column(o, c)
 	}
 	value, ok := m.metricValue(o, c)

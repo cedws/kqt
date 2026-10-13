@@ -140,9 +140,9 @@ func TestStatusRejectsReplacedResourceAndPreservesSortBinding(t *testing.T) {
 	}
 	key(m, "esc")
 	before := m.descending
-	key(m, "S")
+	key(m, "R")
 	if m.descending == before || m.mode != "" {
-		t.Fatal("S no longer reverses the table sort")
+		t.Fatal("R no longer reverses the table sort")
 	}
 	m.backend = backend
 	m.Update(m.command("status")())

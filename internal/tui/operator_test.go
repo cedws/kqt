@@ -253,7 +253,7 @@ func TestShellRequiresTTYAndRunningContainer(t *testing.T) {
 	if m.descending != before || !strings.Contains(m.notice, "live Kubernetes") {
 		t.Fatal("shell key still changed sort")
 	}
-	key(m, "S")
+	key(m, "R")
 	if m.descending == before {
 		t.Fatal("reverse sort shortcut lost")
 	}

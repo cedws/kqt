@@ -14,8 +14,10 @@ import (
 	"time"
 
 	authenticationv1 "k8s.io/api/authentication/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/httpstream"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 )
@@ -60,6 +62,67 @@ func TestLiveOperator(t *testing.T) {
 			return err == nil && present
 		})
 		waitLive(t, 60*time.Second, func() bool { usage, err := client.Metrics(ctx, "Node", ""); return err == nil && len(usage) > 0 })
+	})
+	t.Run("live-events", func(t *testing.T) {
+		eventResource, _ := Resolve(Builtins(), "events")
+		watchContext, stop := context.WithTimeout(ctx, 15*time.Second)
+		defer stop()
+		updates := make(chan EventUpdate, 256)
+		finished := make(chan error, 1)
+		go func() {
+			finished <- client.FollowEvents(watchContext, Query{Resource: eventResource, Namespace: "kqt-test", Fields: "involvedObject.uid=" + string(pod.GetUID())}, func(v EventUpdate) {
+				select {
+				case updates <- v:
+				case <-watchContext.Done():
+				}
+			})
+		}()
+		await := func(match func(EventUpdate) bool) EventUpdate {
+			for {
+				select {
+				case v := <-updates:
+					if match(v) {
+						return v
+					}
+				case err := <-finished:
+					t.Fatalf("watch stopped: %v", err)
+				case <-watchContext.Done():
+					t.Fatal("event update timed out")
+				}
+			}
+		}
+		await(func(v EventUpdate) bool { return v.State == "live" })
+		event, err := client.core.Events("kqt-test").Create(ctx, &corev1.Event{
+			ObjectMeta:     metav1.ObjectMeta{Name: "kqt-watch-fixture", Namespace: "kqt-test"},
+			InvolvedObject: corev1.ObjectReference{APIVersion: "v1", Kind: "Pod", Name: pod.GetName(), Namespace: pod.GetNamespace(), UID: pod.GetUID()},
+			Type:           "Warning", Reason: "KqtWatch", Message: "kqt-watch-marker", Count: 1, LastTimestamp: metav1.Now(),
+		}, metav1.CreateOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		await(func(v EventUpdate) bool { return v.Type == watch.Added && v.Object.GetUID() == event.UID })
+		event.Count = 7
+		event.LastTimestamp = metav1.Now()
+		event, err = client.core.Events("kqt-test").Update(ctx, event, metav1.UpdateOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		await(func(v EventUpdate) bool {
+			return v.Type == watch.Modified && v.Object.GetUID() == event.UID && EventCount(v.Object) == 7
+		})
+		if err := client.core.Events("kqt-test").Delete(ctx, event.Name, metav1.DeleteOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		await(func(v EventUpdate) bool { return v.Type == watch.Deleted && v.Object.GetUID() == event.UID })
+		stop()
+		select {
+		case err := <-finished:
+			if err != nil {
+				t.Fatal(err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("live event stream did not cancel")
+		}
 	})
 	for _, fallback := range []bool{false, true} {
 		name := "websocket"
@@ -165,6 +228,10 @@ func TestLiveOperator(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer limited.Close()
+		events, _ := Resolve(Builtins(), "events")
+		if err := limited.FollowEvents(ctx, Query{Resource: events, Namespace: "kqt-test"}, func(EventUpdate) {}); err == nil || !strings.Contains(strings.ToLower(err.Error()), "forbidden") {
+			t.Fatalf("event watch denial not surfaced: %v", err)
+		}
 		err = limited.Exec(ctx, pod, "fixture", []string{"/bin/sh"}, remotecommand.StreamOptions{Stdout: io.Discard})
 		if err == nil || !strings.Contains(strings.ToLower(err.Error()), "forbidden") {
 			t.Fatalf("exec denial not surfaced: %v", err)

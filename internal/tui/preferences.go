@@ -235,6 +235,8 @@ func (m *model) saveLayout(name string) {
 func (m *model) saveColumns(v viewConfig) {
 	name := m.route.resource.ID()
 	m.views[name] = v
+	// Preserve an explicit false when merging into a previously descending view.
+	values := map[string]any{"columns": v.Columns, "sort": v.Sort, "descending": v.Descending}
 	if p, ok := m.settings.Config.Layouts[m.layout]; ok {
 		if p.Views == nil {
 			p.Views = map[string]viewConfig{}
@@ -242,9 +244,9 @@ func (m *model) saveColumns(v viewConfig) {
 		p.Views[name] = v
 		m.settings.Config.Layouts[m.layout] = p
 		m.settings.Layouts[m.layout].Views[name] = v
-		m.savePreferences(map[string]any{"layouts": map[string]any{m.layout: map[string]any{"views": map[string]any{name: v}}}})
+		m.savePreferences(map[string]any{"layouts": map[string]any{m.layout: map[string]any{"views": map[string]any{name: values}}}})
 	} else {
 		m.settings.Config.Views[name] = v
-		m.savePreferences(map[string]any{"views": map[string]any{name: v}})
+		m.savePreferences(map[string]any{"views": map[string]any{name: values}})
 	}
 }

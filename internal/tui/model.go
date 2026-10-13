@@ -87,73 +87,83 @@ type logsMsg struct {
 }
 
 type model struct {
-	forwardDetail                          uint64
-	ctx                                    context.Context
-	settings                               *Settings
-	options                                Options
-	loader                                 *kube.Loader
-	session                                *session
-	backend                                kube.Backend
-	resources                              []kube.Resource
-	contextName, server                    string
-	generation, request, logToken          uint64
-	requestCancel, logCancel               context.CancelFunc
-	busy                                   bool
-	failures                               int
-	lastRefresh                            time.Time
-	dataErr, notice, discoveryWarning      string
-	route                                  route
-	history                                []route
-	rows, visible                          []unstructured.Unstructured
-	selected, horizontal                   int
-	filter, previousFilter, sortColumn     string
-	descending, wide                       bool
-	theme, previousTheme                   theme
-	layout                                 string
-	views                                  map[string]viewConfig
-	inspectorFormat                        string
-	themeUntil                             time.Time
-	themeTimer                             uint64
-	completion                             completionState
-	editToken                              uint64
-	editCancel                             context.CancelFunc
-	editBuffer                             *editBuffer
-	width, height                          int
-	mode, panelTitle                       string
-	input                                  textinput.Model
-	choices, matches                       []choice
-	pickerIndex                            int
-	pickerKind                             string
-	panel, inspector                       viewport.Model
-	detailFormat                           string
-	inspectedKey, inspectorContent         string
-	inspectorFocused                       bool
-	secretToken                            uint64
-	secretCancel                           context.CancelFunc
-	secretTarget                           string
-	secretObject                           *unstructured.Unstructured
-	logObject                              unstructured.Unstructured
-	logContainer                           string
-	logPrevious                            bool
-	logFollow, logPaused, logTail, logDone bool
-	logFeed                                *logFeed
-	logLines                               []string
-	logColours                             map[string]string
-	logSize, logDropped                    int
-	logSearch                              string
-	pickerReturn                           string
-	metricsEnabled                         bool
-	usage                                  map[string]kube.Usage
-	metricsWarning                         string
-	eventObject                            unstructured.Unstructured
-	eventToken                             uint64
-	eventCancel                            context.CancelFunc
-	shellObject                            unstructured.Unstructured
-	shellContainer                         string
-	shellToken                             uint64
-	shellCancel                            context.CancelFunc
-	forwardID                              uint64
-	forwards                               map[uint64]*forwardSession
+	forwardDetail                            uint64
+	ctx                                      context.Context
+	settings                                 *Settings
+	options                                  Options
+	loader                                   *kube.Loader
+	session                                  *session
+	backend                                  kube.Backend
+	resources                                []kube.Resource
+	contextName, server                      string
+	generation, request, logToken            uint64
+	requestCancel, logCancel                 context.CancelFunc
+	busy                                     bool
+	failures                                 int
+	lastRefresh                              time.Time
+	dataErr, notice, discoveryWarning        string
+	route                                    route
+	history                                  []route
+	rows, visible                            []unstructured.Unstructured
+	selected, horizontal                     int
+	filter, previousFilter, sortColumn       string
+	descending, wide                         bool
+	orderSelected                            string
+	sortExplicit                             bool
+	theme, previousTheme                     theme
+	layout                                   string
+	views                                    map[string]viewConfig
+	inspectorFormat                          string
+	themeUntil                               time.Time
+	themeTimer                               uint64
+	completion                               completionState
+	editToken                                uint64
+	editCancel                               context.CancelFunc
+	editBuffer                               *editBuffer
+	width, height                            int
+	mode, panelTitle                         string
+	input                                    textinput.Model
+	choices, matches                         []choice
+	pickerIndex                              int
+	pickerKind                               string
+	panel, inspector                         viewport.Model
+	detailFormat                             string
+	inspectedKey, inspectorContent           string
+	inspectorFocused                         bool
+	secretToken                              uint64
+	secretCancel                             context.CancelFunc
+	secretTarget                             string
+	secretObject                             *unstructured.Unstructured
+	logObject                                unstructured.Unstructured
+	logContainer                             string
+	logPrevious                              bool
+	logFollow, logPaused, logTail, logDone   bool
+	logFeed                                  *logFeed
+	logLines                                 []string
+	logColours                               map[string]string
+	logSize, logDropped                      int
+	logSearch                                string
+	pickerReturn                             string
+	metricsEnabled                           bool
+	usage                                    map[string]kube.Usage
+	metricsWarning                           string
+	eventObject                              unstructured.Unstructured
+	eventToken                               uint64
+	eventCancel                              context.CancelFunc
+	eventContext                             context.Context
+	eventFeed                                *eventFeed
+	eventStore                               *eventBuffer
+	eventRemoved                             map[string]bool
+	eventGlobal, eventPaused, eventTail      bool
+	eventState, eventError, eventStatusError string
+	eventSearch                              string
+	eventDropped, eventGaps                  int
+	shellObject                              unstructured.Unstructured
+	shellContainer                           string
+	shellToken                               uint64
+	shellCancel                              context.CancelFunc
+	forwardID                                uint64
+	forwards                                 map[uint64]*forwardSession
 }
 
 func newModel(ctx context.Context, s *Settings, o Options, l *kube.Loader) (*model, error) {
@@ -312,6 +322,12 @@ func (m *model) fetch() tea.Cmd {
 	if m.backend == nil || m.busy || m.mode == "shell" || m.mode == "editing" || m.mode == "edit-loading" {
 		return nil
 	}
+	if m.route.resource.Kind == "Event" {
+		if m.eventFeed != nil || m.showingEventPanel() {
+			return nil
+		}
+		return m.followEventTable()
+	}
 	m.busy = true
 	m.request++
 	g, id, b, r := m.generation, m.request, m.backend, m.route
@@ -393,7 +409,11 @@ func (m *model) navigate(r route, remember bool) tea.Cmd {
 	return m.fetch()
 }
 func (m *model) applyView() {
+	m.sortExplicit = false
 	m.sortColumn = "name"
+	if m.route.resource.Kind == "Event" {
+		m.sortColumn = "lastseen"
+	}
 	m.descending = false
 	v, ok := m.views[m.route.resource.ID()]
 	if !ok {
@@ -401,8 +421,10 @@ func (m *model) applyView() {
 	}
 	if v.Sort != "" {
 		m.sortColumn = v.Sort
+		m.sortExplicit = true
 	}
 	m.descending = v.Descending
+	m.orderSelected = m.sortColumn
 }
 func (m *model) columns() []string {
 	v, ok := m.views[m.route.resource.ID()]
@@ -457,6 +479,8 @@ func (m *model) rebuild(key string) {
 			} else if an > bn {
 				n = 1
 			}
+		} else if m.sortColumn == "lastseen" && m.route.resource.Kind == "Event" {
+			n = kube.EventTime(a).Compare(kube.EventTime(b))
 		} else if m.sortColumn == "age" {
 			at, bt := a.GetCreationTimestamp(), b.GetCreationTimestamp()
 			n = bt.Time.Compare(at.Time)
@@ -498,7 +522,7 @@ func (m *model) rebuild(key string) {
 			matched = append(matched, rankedRow{o, best})
 		}
 	}
-	if m.filter != "" {
+	if m.filter != "" && !m.eventGlobal && !m.sortExplicit {
 		slices.SortStableFunc(matched, func(a, b rankedRow) int { return b.score - a.score })
 	}
 	for _, row := range matched {
@@ -670,12 +694,36 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.notice = "Logs saved to " + kube.Safe(v.path)
 		}
 	case eventsMsg:
-		if v.generation == m.generation && v.token == m.eventToken && m.mode == "events" {
+		if v.generation == m.generation && v.token == m.eventToken && m.showingEventPanel() {
 			if v.err != nil {
 				m.panel.SetContent("Unable to read status: " + kube.Safe(v.err.Error()) + "\n\nCtrl+R retries; Esc closes.")
 			} else {
-				m.panel.SetContent(m.renderResourceStatus(v.object, v.events, v.eventsError))
+				m.eventObject = v.object
+				m.eventStore = newEventBuffer()
+				for _, event := range v.events {
+					m.eventStore.put(event, false)
+				}
+				if v.eventsError != nil {
+					m.eventError = kube.Safe(v.eventsError.Error())
+				}
+				m.renderEventPanel()
+				return m, m.startEventWatch()
 			}
+		}
+	case eventPulseMsg:
+		return m, m.eventPulse(v)
+	case eventStatusTickMsg:
+		return m, m.eventStatusTick(v)
+	case eventStatusMsg:
+		return m, m.eventStatusResult(v)
+	case eventSavedMsg:
+		if v.generation != m.generation || v.token != m.eventToken {
+			return m, nil
+		}
+		if v.err != nil {
+			m.notice = "Unable to save events: " + kube.Safe(v.err.Error())
+		} else {
+			m.notice = "Events saved to " + kube.Safe(v.path)
 		}
 	case shellClosedMsg:
 		return m, m.shellClosed(v)
@@ -693,8 +741,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.editFinished(v)
 	case tea.KeyPressMsg:
 		return m, m.key(v)
+	case tea.MouseClickMsg:
+		m.mouseClick(v)
+	case tea.MouseWheelMsg:
+		m.mouseWheel(v)
 	default:
-		if m.mode == "command" || m.mode == "filter" || m.mode == "picker" || m.mode == "log-search" || m.mode == "log-save" {
+		if m.mode == "command" || m.mode == "filter" || m.mode == "picker" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "event-search" || m.mode == "event-save" {
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
 			return m, cmd

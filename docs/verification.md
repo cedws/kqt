@@ -167,7 +167,7 @@ terminal control sanitation, generic custom status fields, and resources without
 status. Rendering leaves original API objects unchanged. Scoped events are
 filtered locally and sorted newest first without modifying backend-owned rows.
 Event-read failures leave status visible; replaced UIDs and late responses are
-rejected. `S` still reverses the table sort, and entering status hides temporarily
+rejected. At this milestone `S` reversed the table sort, and entering status hid temporarily
 revealed Secrets.
 
 Race tests, vet, native builds, and both FreeBSD cross-builds passed. The three-layout demo PTY checks cover
@@ -176,3 +176,61 @@ operator terminal check also passed. Status views fit 40x12, 80x24, and 180x48,
 replace the main pane, and preserve the connection header. The new status PNG
 was captured from the actual demo PTY and visually inspected. The disposable
 live-cluster harness was updated for the view, but not rerun for this change.
+
+## Live events (2026-10-13)
+
+`:events` follows a namespace/all-namespace list/watch stream by default. `E` /
+`:status` keeps resource events live by UID and periodically fetches fresh status.
+Contract tests cover paginated lists, opaque resource versions, bookmarks,
+out-of-scope objects, repeat-count updates, deletions, reconnect after EOF, both
+HTTP and stream 410 expiry, relist gap notices, permissions, idle and stalled
+handshake cancellation, and independence from ordinary request timeouts. Helpers
+handle both core and events.k8s.io event field shapes.
+
+Race/model checks cover count coalescing, record/byte limits, chronological
+eviction, oversized records, heap integrity, pause with continued collection,
+follow versus browsing/inspector focus, search, private export/overwrite refusal,
+save confirmations, stale replies, status-read failures, replaced resource UIDs,
+view/scope cleanup, and terminal dimensions down to 40x12.
+
+The race and static checks and three-layout demo/live terminal suites passed.
+Event-specific demo checks exercised selected/global pause, search, export, and
+namespace changes. A disposable Kubernetes v1.36.2+k3s1 cluster verified actual
+watch add/update/delete notifications, repeat counts, permission denial, and
+cancellation. Live terminal checks changed an event count while paused, verified
+the frozen display, resumed to the updated count, and exported that update with
+one displayed row. Existing logs, shells, forwarding, terminal restoration, and
+saved-preference checks also passed. All disposable clusters were removed;
+the user's default kubeconfig was not changed.
+
+Native and both FreeBSD cross-builds passed. Refreshed status and event screenshots
+were captured from actual demo PTYs and visually inspected. FreeBSD runtime,
+production-scale load, and provider-specific watch authentication refresh remain
+outside this qualification.
+
+## Column ordering and mouse controls (2026-10-13)
+
+`S` now opens resource status (with `E` retained), and `R` reverses the current
+order. Headers accept mouse clicks; `O` cycles to the next visible column and
+sorts ascending. Shift+Left/Right or `[` / `]` cycles backward/forward. `:sort`
+supplies a searchable picker and explicit asc/desc
+commands. Orders persist per resource/layout, including changing a previously
+saved descending order back to ascending.
+
+Race and model checks cover sorting through mouse/keyboard/commands, selection
+preservation, search-ranking precedence, numeric counts, exact timestamps,
+custom/Unicode columns and horizontal clipping, layout persistence, input/modal
+isolation, ignored mouse releases/modifiers/borders, row/inspector selection,
+wheel scrolling, hidden Secret data, and live-event pause/follow behavior.
+Column cycling additionally covers wraparound, hidden sorts, custom/metric
+columns, and a one-column table; cycling preserves selection and never reverses.
+The three-layout demo PTY checks sent actual SGR mouse press/release sequences,
+Shift+arrow sequences, `O`, `R`, and sort-picker input. Terminal reporting and
+attributes restored on exit, and preference restart checks passed.
+
+The live operator PTY check passed in a disposable Kubernetes v1.36.2+k3s1
+cluster with mouse reporting enabled. Status/live events, logs, shell handoff,
+remote resize, Ctrl+C, disconnect, forwarding, and terminal restoration passed;
+the cluster was removed. Native and both FreeBSD cross-builds passed. The
+Kubernetes watch transport is unchanged by this UI update. Actual pointer use in
+every terminal emulator and FreeBSD runtime remain unqualified.

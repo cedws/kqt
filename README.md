@@ -31,7 +31,7 @@ With mise and just, use `just build`, `just demo`, and `just check`.
 
 The **Build binaries** GitHub workflow runs on pushes (including tags), pull
 requests, and manual dispatch. Pushing a [SemVer](https://semver.org/) tag such as
-`v0.0.1` creates a [GitHub release](https://github.com/z0mbix/kqt/releases) after
+`v0.0.2` creates a [GitHub release](https://github.com/z0mbix/kqt/releases) after
 the tests and all six builds pass. Tags with prerelease identifiers, such as
 `v0.1.0-rc.1`, create prereleases. Invalid version tags fail before building.
 Download the matching release archive, or use the workflow run's **Artifacts**
@@ -82,7 +82,7 @@ picker opens. UI preferences never silently select a different Kubernetes contex
 | `x` on a Secret | Toggle decoded values in the inspector or details |
 | `L`, `P` | Live logs / previous log snapshots from a pod, deployment, or statefulset |
 | `Space`, `/`, `f`, `o` in logs | Pause, search, switch live/snapshot, save displayed logs |
-| `E`, `:status`, `:events selected` | Readable status, conditions, containers, and events |
+| `S` (also `E`), `:status`, `:events selected` | Readable status, conditions, containers, and live events |
 | `m`, `:metrics on` / `off` | Toggle pod/node CPU and memory columns |
 | `s`, `:shell` | Open a shell in a running pod/container |
 | `f`, `:forward LOCAL:REMOTE` | Forward a pod/service port to localhost |
@@ -91,7 +91,11 @@ picker opens. UI preferences never silently select a different Kubernetes contex
 | `t`, `:themes` | Fuzzy theme picker with reversible previews |
 | `:layouts`, `:layout NAME` | Choose a saved layout |
 | `:write NAME` | Save current arrangement, columns, sort, and wide state |
-| `i`, `w`, `S` | Cycle inspector positions, wide fields, reverse sort |
+| `i`, `w` | Cycle inspector positions, wide fields |
+| `O` | Sort by the next visible column, ascending; wraps to the first |
+| `Shift+Left/Right` or `[` / `]` | Sort by the previous / next visible column |
+| `R` | Reverse current sort direction |
+| `:sort`, `:sort COLUMN asc` / `desc` | Choose a column or set its order explicitly |
 | `Ctrl+R`, `Escape`, `?`, `q` | Refresh, back/close, help, quit |
 
 Completion covers commands, resource names and aliases, theme/layout names,
@@ -112,6 +116,19 @@ header stays **connected** during healthy background refreshes; **loading** is
 reserved for connection/initial loading. Failed requests retain the last good
 snapshot with a **STALE** label. Context and route changes cancel requests, clear
 old data, and reject obsolete responses. Selection survives refresh and sort.
+
+Click a column header to sort ascending, and click it again to reverse direction.
+The underlined header and `↑` / `↓` mark the active sort. `O` cycles through
+visible columns, sorting ascending each time; `R` reverses the current direction.
+`Shift+Left/Right` or `[` / `]` cycles backward / forward. Mouse and keyboard sorting
+preserve the selected resource, and
+the order is saved per resource in the active layout. `:sort` opens a searchable
+column picker, including custom columns and enabled metrics. Sorting uses numeric
+values and exact timestamps for age/event time. Explicit sorting takes precedence
+over fuzzy-match ranking. Choosing an order stops live-event following until `G`
+resumes it. Mouse clicks select rows or focus the inspector; the wheel scrolls the
+pane under the pointer. Terminal text selection usually requires holding Shift
+while using the mouse; the exact modifier depends on your terminal.
 
 YAML and JSON use the active palette's syntax colours in full-screen panels and
 inspectors. In the table, `J` opens JSON. With the inspector focused, `J` changes
@@ -162,21 +179,35 @@ logs, switching contexts, and quitting cancel the streams.
 
 ## Events and metrics
 
-`E` (or `:status`) shows a readable status summary, pod container states/restarts,
+`S` (also `E`, or `:status`) shows a readable status summary, pod container states/restarts,
 workload replica counts, and conditions with reasons, messages, and transition
 times. Colours distinguish readiness from failure/pressure predicates; unknown
 custom conditions retain neutral colours. Other custom-resource status fields
 appear as highlighted YAML. Resources without status say so explicitly.
 
-Events follow below, matched by immutable UID and sorted newest first. Scroll
-with `j/k` or `Ctrl+U/D`; `G` jumps to the bottom.
-`Ctrl+R` reloads the fresh resource and its events. Status remains readable if
-event permissions/API requests fail, with the event failure shown separately.
-`S` continues to reverse the table sort.
+Events follow below, matched by immutable UID and updated live. Status refreshes
+at the configured interval; events appear oldest first so new activity follows
+at the bottom. Scroll with `j/k` or `Ctrl+U/D`; `G` follows the latest event.
+`Space` pauses the display while collection continues, `/` filters events, and
+`o` saves the displayed status and events to a private file. `Ctrl+R` reloads.
+Status remains readable if event permissions/API requests fail, with the failure
+shown separately. `R` reverses the table sort.
 
 ![Readable status for a restarting pod](docs/screenshots/status.png)
-`:events` still opens the general events table; `:events selected` opens the
-resource-specific panel. Events may have expired from Kubernetes retention.
+`:events` opens a live event table for the current namespace; `0` switches to all
+namespaces and `n` selects a namespace. The table supports the same pause,
+filter, follow, and export controls. `:events selected` opens the resource status
+panel. There is no separate watch command.
+
+Repeat counts update one row per event UID. Each view retains up to 2,000 records
+or 4 MiB of event data, evicting the oldest observations. Events removed by the
+API stay in this history with a `removed` label. Reconnection resumes from the
+last received resource version; expired history is reloaded with a visible gap
+notice. Events already expired from Kubernetes retention cannot be recovered.
+Event access requires `list` and `watch` permissions; resource status also uses
+`get`. Exports use mode `0600` and refuse to overwrite an existing file.
+
+![Live Kubernetes events](docs/screenshots/events.png)
 
 `m` adds CPU and memory usage to pod/node tables. The cluster must provide the
 [Metrics API](https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/),

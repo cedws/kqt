@@ -83,19 +83,62 @@ lines are cached only while retained in the log buffer; eviction, stream closure
 and theme changes release or invalidate those entries. Filtering/export use
 plain text, so searches can span coloured tokens and exports contain no ANSI.
 
+## Column ordering and mouse input
+
+Bubble Tea v2 supplies native mouse click, release, and wheel messages through
+`View.MouseModeCellMotion`; no additional dependency is needed. Mouse reporting
+is disabled while editing or running a native shell. Table rendering and hit
+testing share column widths, horizontal offsets, pane dimensions, and the visible
+row range. This keeps headers/rows aligned in classic, right-inspector, and
+bottom-inspector layouts, including Unicode and clipped custom columns.
+
+Clicking a header sorts ascending or reverses the current column. `O` cycles
+forward through visible columns, wrapping to the first and sorting ascending.
+Shift+Left/Right (or `[` / `]`) cycles backward/forward; `R` reverses the current
+order. The active header is underlined. `:sort` offers a searchable column picker and
+`:sort COLUMN asc|desc` specifies an exact direction. Sort choices are saved per
+resource in the active layout. Explicit ordering takes precedence over fuzzy
+match ranking, retains selection by UID, and uses exact age/event timestamps and
+numeric metrics/counts. Manual event ordering stops following until `G` resumes.
+Input fields and modal panels prevent header clicks from changing the table.
+Row clicks select without opening resources, inspector clicks focus it, and wheel
+messages scroll the pane under the pointer.
+
+The column controls build on [K9s's table bindings](https://github.com/derailed/k9s/blob/master/internal/view/table.go), with `O` cycling and applying the next column directly.
+Mouse support comes from [Bubble Tea's view API](https://github.com/charmbracelet/bubbletea/blob/v2.0.10/tea.go).
+
 ## Events, metrics, and connections
 
-Selected-resource events use a UID field selector, fresh identity checks, and
-newest-first ordering. `E` / `:status` renders a themed status summary, workload
+`:events` starts a client-go list/watch for the current namespace, with all
+namespaces available through the ordinary scope controls. Selected-resource
+events use a UID field selector and fresh identity checks. `S` / `:status` renders
+a themed status summary, workload
 replica counts, pod container state/restarts/last exits, and condition reasons,
 messages, and transition timestamps before events. Standard negative predicates
 (for example node pressure or failure) use the opposite colour polarity to
 readiness; unknown custom predicates stay neutral. Stale condition generations
 are labelled. Custom status fields remain available as highlighted YAML, and
 resources without status say so. Event-read errors do not hide readable status.
-`Ctrl+R` reloads; scrolling stays local to the panel. Status replaces the main
+Status refreshes at the configured interval while events follow a watch stream,
+oldest first. Repeat counts update by UID. `Space` freezes the displayed view
+while collecting, `/` filters, `G` follows the latest event, and `o` exports the
+displayed content using exclusive creation with mode 0600. `Ctrl+R` reloads;
+scrolling stays local to the panel. Status replaces the main
 pane, preserving the connection header without background inspector fragments.
-`S` retains reverse-sort.
+`S` opens status (with `E` retained as an alias); `R` reverses sort direction.
+
+The initial event list is paginated and establishes a resource-version
+checkpoint. Watches accept bookmarks, renew after server timeouts, reconnect
+with backoff from the last checkpoint, and relist on HTTP or stream 410 errors.
+Relists leave a visible history-gap marker. Both the producer queue and retained
+view cap event data at 4 MiB / 2,000 records, coalescing by UID and evicting the
+oldest event occurrences. API deletion marks retained history as removed.
+Rendering is coalesced to at most ten updates per second. List/setup requests
+have 15-second bounds; established watches renew within 75 seconds, independent
+of the ordinary client request timeout. Context/scope/view changes cancel the
+source and reject old replies. A replaced/deleted selected resource ends its
+watch; temporary status-read failures keep previous status with a stale label.
+The watch lifecycle follows the [Kubernetes API watch semantics](https://kubernetes.io/docs/reference/using-api/api-concepts/#efficient-detection-of-changes).
 Node condition meanings follow the [Kubernetes Node Status reference](https://kubernetes.io/docs/reference/node/node-status/).
 Deployment progress follows the [Deployment status documentation](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#deployment-status).
 Metrics try the stable API

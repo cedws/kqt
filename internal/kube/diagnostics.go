@@ -136,7 +136,7 @@ func empty(v interface{}) interface{} {
 	return v
 }
 func eventTime(event unstructured.Unstructured) time.Time {
-	for _, path := range [][]string{{"series", "lastObservedTime"}, {"lastTimestamp"}, {"eventTime"}, {"metadata", "creationTimestamp"}} {
+	for _, path := range [][]string{{"series", "lastObservedTime"}, {"lastTimestamp"}, {"deprecatedLastTimestamp"}, {"eventTime"}, {"metadata", "creationTimestamp"}} {
 		if value, err := time.Parse(time.RFC3339Nano, Text(event, path...)); err == nil {
 			return value
 		}

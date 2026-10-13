@@ -61,7 +61,7 @@ func (m *model) resize() {
 		m.input.SetWidth(max(1, min(90, m.width-4)-6))
 	}
 	panelWidth, panelHeight := m.width-6, m.height-6
-	if m.showingLogs() || m.mode == "events" {
+	if m.showingLogs() || m.showingEventPanel() {
 		panelWidth, panelHeight = m.width-2, m.height-8
 	}
 	m.panel.SetWidth(max(1, panelWidth))
@@ -91,7 +91,14 @@ func heading(c string) string {
 	}
 	return strings.ToUpper(c)
 }
-func (m *model) table(width, height int) string {
+
+type tableGeometry struct {
+	columns                  []string
+	widths                   []int
+	total, offset, dataWidth int
+}
+
+func (m *model) tableGeometry(width int) tableGeometry {
 	cols := m.columns()
 	widths := make([]int, len(cols))
 	desired := make([]int, len(cols))
@@ -137,6 +144,18 @@ func (m *model) table(width, height int) string {
 		}
 	}
 	x := min(m.horizontal, max(0, total-inner))
+	return tableGeometry{cols, widths, total, x, max(0, inner-2)}
+}
+
+func tableStart(selected, count, capacity int) int {
+	return min(max(0, selected-capacity+1), max(0, count-capacity))
+}
+
+func (m *model) table(width, height int) string {
+	geometry := m.tableGeometry(width)
+	cols, widths, total, x := geometry.columns, geometry.widths, geometry.total, geometry.offset
+	inner := width - 2
+	chosen := m.orderColumn()
 	var cells []string
 	for i, c := range cols {
 		h := heading(c)
@@ -147,17 +166,21 @@ func (m *model) table(width, height int) string {
 				h += " ↑"
 			}
 		}
-		cells = append(cells, fit(h, widths[i]))
+		cell := fit(h, widths[i])
+		if c == chosen {
+			cell = m.theme.style("focus").Bold(true).Underline(true).Render(cell)
+		}
+		cells = append(cells, cell)
 	}
 	lines := []string{m.theme.style("accent").Bold(true).Render(fit("  "+ansi.Cut(strings.Join(cells, " "), x, x+max(0, inner-2)), inner))}
 	capacity := max(0, height-3)
-	start := min(max(0, m.selected-capacity+1), max(0, len(m.visible)-capacity))
+	start := tableStart(m.selected, len(m.visible), capacity)
 	for i := start; i < min(len(m.visible), start+capacity); i++ {
 		o := m.visible[i]
 		cells = nil
 		for j, c := range cols {
 			value := fit(kube.Safe(m.column(o, c)), widths[j])
-			if c == "status" && i != m.selected {
+			if (c == "status" || o.GetKind() == "Event" && c == "type") && i != m.selected {
 				value = m.theme.style(m.statusToken(kube.Status(o))).Render(value)
 			}
 			cells = append(cells, value)
@@ -190,6 +213,9 @@ func (m *model) table(width, height int) string {
 		title = "resources"
 	}
 	title += fmt.Sprintf(" [%d]", len(m.visible))
+	if m.eventGlobal && m.route.resource.Kind == "Event" {
+		title += " · " + m.eventViewState()
+	}
 	if total > inner {
 		title += fmt.Sprintf(" · scroll %d/%d", x, total-inner)
 	}
@@ -281,7 +307,7 @@ func (m *model) View() tea.View {
 		bodyHeight := h - 6
 		d := m.inspectorDimensions()
 		body := ""
-		if m.showingLogs() || m.mode == "events" {
+		if m.showingLogs() || m.showingEventPanel() {
 			title := m.panelTitle + " · Esc close · hjkl scroll · Ctrl+R reload"
 			if m.showingLogs() {
 				title = m.panelTitle + " · Esc close · hjkl scroll · c container · p previous · Ctrl+R reload"
@@ -322,14 +348,27 @@ func (m *model) View() tea.View {
 				token = "warning"
 			}
 		}
-		if m.mode == "command" || m.mode == "filter" || m.mode == "log-search" || m.mode == "log-save" {
+		if m.eventGlobal && m.route.resource.Kind == "Event" && m.notice == "" {
+			status = " Events · " + m.eventViewState()
+			if m.eventError != "" {
+				status += " · " + m.eventError
+				token = "warning"
+			}
+			if dropped := m.eventDropped + m.eventStore.dropped; dropped > 0 {
+				status += fmt.Sprintf(" · %d records omitted", dropped)
+			}
+			if m.eventGaps > 0 {
+				status += " · resynced; history may have gaps"
+			}
+		}
+		if m.mode == "command" || m.mode == "filter" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "event-search" || m.mode == "event-save" {
 			status = m.input.View()
 			token = "foreground"
 		}
 		lines = append(lines, m.theme.style(token).Render(fit(status, w)))
-		help := " j/k move  : command  / filter  Enter open  n namespaces  ? help  q quit"
+		help := " j/k move  [/] column  O next sort  R reverse  S status  : command  ? help  q quit"
 		if d.width > 0 {
-			help = " j/k move  Tab inspector  : command  / filter  n namespaces  ? help  q quit"
+			help = " j/k move  Tab inspector  O next sort  R reverse  S status  : command  ? help"
 		}
 		if m.inspectorFocused {
 			help = " j/k scroll  Ctrl+U/D page  g/G ends  Tab/Esc list  ? help  q quit"
@@ -349,8 +388,10 @@ func (m *model) View() tea.View {
 		if m.showingLogs() {
 			help = " Space pause  / search  f live/snapshot  o save  c container  p previous  Esc close"
 		}
-		if m.mode == "events" {
-			help = " j/k scroll  Ctrl+U/D page  g/G ends  Ctrl+R reload  Esc close"
+		if m.showingEventPanel() {
+			help = " Space pause  / filter  o save  G follow  Ctrl+R reload  Esc close"
+		} else if m.eventGlobal && m.mode == "" && !m.inspectorFocused {
+			help = " Space pause  / filter  o save  G follow  0 all namespaces  : command  q quit"
 		}
 		lines = append(lines, m.theme.style("muted").Render(fit(help, w)))
 		content = strings.Join(lines, "\n")
@@ -371,6 +412,9 @@ func (m *model) View() tea.View {
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true
+	if w >= 40 && h >= 12 && m.mode != "shell" && m.mode != "editing" && m.mode != "edit-loading" {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
 	if m.theme.Colors["background"] != "default" {
 		v.BackgroundColor = m.theme.color("background")
 	}

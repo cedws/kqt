@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Qualify live logs, events, metrics, native shells and localhost forwarding."""
 import argparse
+import datetime
 import fcntl
+import json
 import os
 from pathlib import Path
 import re
@@ -87,8 +89,23 @@ def run(root, bad_shell=False):
         if bad_shell:
             send(b's'); expect('Shell failed:'); send(b'\x1b'); expect('pods [1]')
         else:
-            send(b'E'); expect('Status & Events'); expect('Containers')
+            send(b'S'); expect('Status & Events'); expect('Containers')
+            expect('live')
             send(b'G'); expect('kqt-event-marker' if args.kubeconfig else 'Back-off restarting')
+            if not args.kubeconfig:
+                expect('demo event heartbeat')
+                send(b' '); expect('paused')
+                before = screen(raw, width, height).splitlines()[4:-2]
+                pump(2)
+                assert before == screen(raw, width, height).splitlines()[4:-2], 'paused events moved'
+                send(b' ')
+                send(b'/no-such-event\r'); expect('No events match')
+                send(b'/\x01\x0bdemo event heartbeat\r'); expect('demo event heartbeat')
+                destination = root / 'selected-events.log'
+                send(b'o'); send(b'\x01\x0b' + str(destination).encode() + b'\r')
+                expect('Events saved to')
+                assert 'demo event heartbeat' in destination.read_text(), 'event export lost displayed lines'
+                assert destination.stat().st_mode & 0o777 == 0o600, 'event export is not private'
             send(b'g'); expect('Pod IP'); send(b'\x1b')
             send(b'm'); expect('CPU'); expect('MEMORY'); send(b'm')
             send(b'L')
@@ -134,6 +151,42 @@ def run(root, bad_shell=False):
                 send(b':forward 0:8080\r'); second = expect_port(2)
             else:
                 send(b's'); expect('live Kubernetes connection')
+            send(b':events\r'); expect('Events · live')
+            if args.kubeconfig:
+                context = subprocess.check_output(['kubectl', '--kubeconfig', str(args.kubeconfig.resolve()), 'config', 'current-context'], text=True).strip()
+                assert context.startswith('k3d-kqt-smoke-'), 'event mutation requires disposable fixture'
+                width, height = 140, 30
+                fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', height, width, 0, 0))
+                os.killpg(process.pid, signal.SIGWINCH); pump(0.5)
+                send(b'/kqt-event-marker\r'); expect('events [1]'); expect('kqt-event-marker')
+                send(b' '); expect('paused')
+                before = screen(raw, width, height).splitlines()[4:-2]
+                patch = json.dumps({'count': 7, 'lastTimestamp': datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00', 'Z')})
+                subprocess.run(['kubectl', '--kubeconfig', str(args.kubeconfig.resolve()), 'patch', 'event', 'kqt-fixture-event', '-n', 'kqt-test', '--type=merge', '-p', patch], check=True, stdout=subprocess.DEVNULL)
+                pump(1)
+                assert before == screen(raw, width, height).splitlines()[4:-2], 'paused live event table moved'
+                send(b' ')
+                deadline = time.monotonic() + 5
+                while not re.search(r'KqtFixture\s+7\s+', screen(raw, width, height)) and time.monotonic() < deadline:
+                    pump()
+                assert re.search(r'KqtFixture\s+7\s+', screen(raw, width, height)), 'live event repeat update did not reach table'
+                destination = root / 'live-events.log'
+                send(b'o'); send(b'\x01\x0b' + str(destination).encode() + b'\r'); expect('Events saved to')
+                assert '×7 kqt-event-marker' in destination.read_text(), 'live event export missed repeat update'
+            else:
+                # At 80 columns the last columns scroll horizontally.
+                send(b'/DemoHeartbeat\r'); expect('events [1]')
+                send(b' '); expect('paused')
+                before = screen(raw, width, height).splitlines()[4:-2]
+                pump(2)
+                assert before == screen(raw, width, height).splitlines()[4:-2], 'paused event table moved'
+                send(b' '); expect('following')
+                send(b'0'); expect('Namespace: all')
+                send(b'/DemoHeartbeat\r'); expect('events [2]')
+                destination = root / 'all-events.log'
+                send(b'o'); send(b'\x01\x0b' + str(destination).encode() + b'\r'); expect('Events saved to')
+                assert '[default/Pod/' in destination.read_text() and '[platform/Pod/' in destination.read_text(), 'all-namespace export lost scope'
+                send(b':ns default\r'); send(b'/DemoHeartbeat\r'); expect('events [1]')
         send(b'q')
         deadline = time.monotonic() + 5
         while b'__kqt_exit__0' not in raw and time.monotonic() < deadline:

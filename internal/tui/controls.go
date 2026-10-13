@@ -58,6 +58,9 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		m.close()
 		return tea.Quit
 	}
+	if m.mode == "event-search" || m.mode == "event-save" {
+		return m.eventsInputKey(msg)
+	}
 	if m.mode == "log-search" || m.mode == "log-save" {
 		return m.logsInputKey(msg)
 	}
@@ -112,9 +115,14 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 				m.updateInspector()
 			}
 			m.closeLog()
-			m.closeEvents()
+			if !m.eventGlobal {
+				m.closeEvents()
+			}
 			m.mode = ""
 			m.resize()
+			if m.route.resource.Kind == "Event" && m.eventFeed == nil {
+				return m.followEventTable()
+			}
 			return nil
 		}
 		if m.mode == "logs" {
@@ -154,8 +162,11 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 				return m.openPicker("containers")
 			}
 		}
-		if m.mode == "events" && k == "ctrl+r" {
-			return m.loadEvents()
+		if m.mode == "events" {
+			cmd := m.eventsKey(k)
+			if cmd != nil || k == "space" || k == " " || k == "G" || k == "end" {
+				return cmd
+			}
 		}
 		if m.mode == "forward-details" && k == "x" {
 			m.stopForward(m.forwardDetail)
@@ -183,12 +194,21 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		m.close()
 		return tea.Quit
 	}
+	if m.eventGlobal && m.route.resource.Kind == "Event" {
+		cmd := m.eventsKey(k)
+		if cmd != nil || k == "space" || k == " " || k == "G" || k == "end" {
+			return cmd
+		}
+	}
 	if k == "x" {
 		return m.toggleSecret()
 	}
 	if k == "tab" || k == "shift+tab" {
 		if m.inspectorDimensions().width > 0 {
 			m.inspectorFocused = !m.inspectorFocused
+			if m.eventGlobal && m.inspectorFocused {
+				m.eventTail = false
+			}
 		}
 		return nil
 	}
@@ -253,7 +273,7 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		return m.openLogs(false)
 	case "P":
 		return m.openLogs(true)
-	case "E":
+	case "S", "E":
 		return m.openEvents()
 	case "m":
 		return m.toggleMetrics()
@@ -279,13 +299,14 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		m.wide = !m.wide
 	case "s":
 		return m.openShell()
-	case "S":
-		m.descending = !m.descending
-		key := ""
-		if o, ok := m.current(); ok {
-			key = kube.Identity(o)
-		}
-		m.rebuild(key)
+	case "R":
+		m.setOrder(m.sortColumn, !m.descending)
+	case "[", "shift+left":
+		m.cycleOrder(-1)
+	case "]", "shift+right":
+		m.cycleOrder(1)
+	case "O":
+		m.cycleOrder(1)
 	case "i":
 		switch m.settings.Layouts[m.layout].Inspector {
 		case "none":
@@ -504,16 +525,7 @@ func (m *model) command(value string) tea.Cmd {
 			m.notice = "Use :inspector json, yaml, right, bottom, or none"
 		}
 	case "sort":
-		if !validColumn(arg) {
-			m.notice = "Unknown sort column: " + kube.Safe(arg)
-			return nil
-		}
-		m.sortColumn = arg
-		key := ""
-		if o, ok := m.current(); ok {
-			key = kube.Identity(o)
-		}
-		m.rebuild(key)
+		return m.sortCommand(arg)
 	case "columns":
 		cols := strings.FieldsFunc(arg, func(r rune) bool { return r == ',' || r == ' ' })
 		if len(cols) == 0 || len(cols) > 32 {
@@ -592,6 +604,19 @@ func (m *model) openPicker(kind string) tea.Cmd {
 	m.choices = nil
 	m.pickerIndex = 0
 	switch kind {
+	case "sort":
+		for i, column := range m.columns() {
+			description := "sort ascending"
+			if column == m.sortColumn {
+				direction, next := "ascending", "descending"
+				if m.descending {
+					direction, next = next, direction
+				}
+				description = direction + " · select to sort " + next
+				m.pickerIndex = i
+			}
+			m.choices = append(m.choices, choice{column, description})
+		}
 	case "forwards":
 		m.refreshForwardChoices()
 	case "shell-containers":
@@ -703,6 +728,8 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.mode = ""
 		m.input.Blur()
 		switch m.pickerKind {
+		case "sort":
+			m.chooseOrder(c.name)
 		case "shell-containers":
 			m.shellContainer = c.name
 			return m.runShell()
@@ -746,6 +773,9 @@ Navigation
   g/G, Home/End      First / last row
   Ctrl+U/D, PgUp/Dn  Page rows or panels
   h/l, left/right    Scroll wide tables and manifests
+  Shift+Left/Right   Sort previous / next column (also [ / ])
+  O / R              Sort next column / reverse current order
+  Mouse              Click column to sort, click row to select, wheel to scroll
   Enter              Workload/service/node -> pods; namespace -> scope
   Escape             Close, clear filter, or go back
   Tab                Focus inspector (outside a command)
@@ -765,7 +795,9 @@ Explore
   Details: J / y     Switch open manifest panel to JSON / YAML
   Secrets: x         Toggle decoded values; hidden by default
   L / P              Logs / previous logs: pod, deployment, statefulset
-  E / :status        Readable status, conditions, containers, and events
+  S / :status        Status, conditions, containers, and live events (E also works)
+  :events            Live namespace event table (0 = all namespaces)
+  Events             Space pause, / filter, G follow latest, o save
   m / :metrics       Toggle pod/node CPU and memory columns
   s / :shell         Shell in a running pod/container; Ctrl+] disconnects
   f                  Forward a pod/service port (LOCAL:REMOTE; LOCAL 0 auto)
@@ -780,7 +812,8 @@ Appearance and saved settings
   :write NAME        Save current arrangement and columns as a layout
   i                  Cycle right / bottom / classic inspector layouts
   :inspector json    Also accepts yaml, right, bottom, none
-  w / S              Wide fields / reverse sort; :sort age chooses field
+  w                  Wide fields
+  :sort              Column picker; :sort COLUMN asc|desc sets an order
   :columns name,status,age   Configure columns for the active layout
   /spec/replicas     JSON Pointer column (also supported in config)
   Pickers            Type to search; arrows / Ctrl+J/K move; Enter selects

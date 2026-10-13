@@ -191,7 +191,11 @@ func (m *model) renderResourceStatus(o unstructured.Unstructured, events []unstr
 		}
 	}
 	w.WriteByte('\n')
-	w.heading("Events (newest first)")
+	if m.eventFeed != nil && !m.eventGlobal {
+		w.heading("Events (oldest first · live feed)")
+	} else {
+		w.heading("Events (newest first)")
+	}
 	if eventsError != nil {
 		w.field("Unavailable", eventsError.Error(), "warning")
 		w.note("Resource status is shown above. Ctrl+R retries reading events.")
@@ -203,18 +207,19 @@ func (m *model) renderResourceStatus(o unstructured.Unstructured, events []unstr
 		if observed := kube.EventTime(event); !observed.IsZero() {
 			timestamp = observed.UTC().Format(time.RFC3339)
 		}
-		repeats := kube.Number(event, "count")
-		if series := kube.Number(event, "series", "count"); series > 0 {
-			repeats = series
-		}
-		repeats = max(1, repeats)
+		repeats := kube.EventCount(event)
 		kind := kube.Text(event, "type")
+		if m.eventStore != nil {
+			if entry := m.eventStore.items[kube.Identity(event)]; entry != nil && entry.deleted {
+				kind += " (removed)"
+			}
+		}
 		colour := "muted"
-		if kind == "Warning" {
+		if kube.Text(event, "type") == "Warning" {
 			colour = "warning"
 		}
 		w.field(kind, fmt.Sprintf("%s · %s · ×%d", kube.Text(event, "reason"), timestamp, repeats), colour)
-		w.note(kube.Text(event, "message"))
+		w.note(kube.EventMessage(event))
 	}
 	return w.String()
 }

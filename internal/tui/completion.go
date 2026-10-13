@@ -63,7 +63,10 @@ func (m *model) completeCommand(reverse bool) {
 			case "inspector":
 				names = []string{"yaml", "json", "right", "bottom", "none"}
 			case "sort":
-				names = append(m.columns(), "name", "age", "status", "restarts")
+				columns := append(m.columns(), "name", "age", "status", "restarts")
+				for _, column := range columns {
+					names = append(names, column, column+" asc", column+" desc")
+				}
 			case "logs":
 				names = []string{"previous"}
 			case "events":
