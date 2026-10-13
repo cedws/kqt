@@ -10,17 +10,21 @@ kubectl is not required at runtime.
 ## Run
 
 Requires Go 1.27.1 or later; mise pins Go 1.27.1 for this repository.
+With mise activated in your shell, the repository's mise configuration adds
+`./bin/` to your `PATH` while you work here, so you can run the built binary as
+`kqt`.
 
 ```sh
-go build -trimpath -o bin/ket ./cmd/ket
-./bin/ket --demo                 # Offline sample cluster
-./bin/ket                        # Current context and saved view / namespace
-./bin/ket -A                     # Override saved scope: all namespaces
-./bin/ket --context staging -n apps --theme nord
-./bin/ket --view deploy --layout classic -l app=web
+go build -trimpath -o bin/kqt ./cmd/ket
+kqt --demo                      # Offline sample cluster
+kqt                             # Current context and saved view / namespace
+kqt -A                          # Override saved scope: all namespaces
+kqt --context staging -n apps --theme nord
+kqt --view deploy --layout classic -l app=web
 ```
 
-With mise and just, use `just build`, `just demo`, and `just check`.
+With mise and just, use `just demo` for the sample cluster and `just check` for
+tests.
 
 ## Binary builds
 
@@ -208,9 +212,9 @@ override saved values. A theme preview is not saved until Enter; Escape cancels 
 The theme name appears on the connection line for ten seconds after selection.
 
 ```sh
-./bin/ket config                 # Print a YAML example
-./bin/ket config --validate
-./bin/ket config --validate --config ./my-config.yaml
+kqt config                      # Print a YAML example
+kqt config --validate
+kqt config --validate --config ./my-config.yaml
 ```
 
 ```yaml
@@ -254,7 +258,7 @@ JSON Pointer columns such as `/spec/replicas` and
 `/metadata/labels/app.kubernetes.io~1name` are supported. Numeric fields sort
 numerically; age uses creation time.
 
-All 18 Maestro palettes are bundled. `./bin/ket themes` lists them. `--theme`
+All 18 Maestro palettes are bundled. `kqt themes` lists them. `--theme`
 overrides `KET_THEME`, which overrides the saved theme. Custom themes retain the
 Maestro TOML format under `themes/NAME.toml` beside the settings file:
 
@@ -281,7 +285,7 @@ stored in ket's UI config.
 ```sh
 go test -race ./...
 go vet ./...
-python3 scripts/tui-smoke.py --binary bin/ket
+python3 scripts/tui-smoke.py --binary bin/kqt
 ```
 
 `just check`, `just smoke`, and `just smoke-live` are provided. The live check uses
