@@ -46,6 +46,11 @@ func (m *model) startInput(mode, value string) tea.Cmd {
 	m.completion = completionState{}
 	m.input.SetValue(value)
 	m.input.CursorEnd()
+	if mode == "command" {
+		m.commandHistoryIndex = len(m.settings.Config.CommandHistory)
+		m.commandDraft = value
+		m.commandDraftCursor = m.input.Position()
+	}
 	m.input.Prompt = ":"
 	if mode == "filter" {
 		m.input.Prompt = "/"
@@ -65,6 +70,10 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		return m.logsInputKey(msg)
 	}
 	if m.mode == "command" || m.mode == "filter" {
+		if m.mode == "command" && (k == "up" || k == "down") {
+			m.recallCommand(k == "up")
+			return nil
+		}
 		if m.mode == "command" && (k == "tab" || k == "shift+tab") {
 			m.completeCommand(k == "shift+tab")
 			return nil
@@ -84,7 +93,9 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 			m.mode = ""
 			m.input.Blur()
 			if mode == "command" {
-				return m.command(value)
+				cmd := m.command(strings.TrimSpace(value))
+				m.rememberCommand(value)
+				return cmd
 			}
 			return nil
 		}
@@ -176,6 +187,10 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		if m.mode == "details" {
 			switch k {
 			case "x":
+				if o, ok := m.current(); ok && (o.GetKind() == "Pod" || o.GetKind() == "Service") {
+					m.stopResourceForwards()
+					return nil
+				}
 				return m.toggleSecret()
 			case "J":
 				m.openDetails(false, true)
@@ -201,6 +216,10 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	if k == "x" {
+		if o, ok := m.current(); ok && (o.GetKind() == "Pod" || o.GetKind() == "Service") {
+			m.stopResourceForwards()
+			return nil
+		}
 		return m.toggleSecret()
 	}
 	if k == "tab" || k == "shift+tab" {
@@ -782,6 +801,7 @@ Navigation
 
 Explore
   :                  Command prompt; Tab / Shift+Tab cycle completions
+  Up / Down          Recall last 50 commands in the command prompt
   /                  Fuzzy search: web0003 matches web-7c9f6d8b5-0003
   n / :ns            Browse namespaces; Enter selects one
   :ns NAME / :ns -A   Set namespace / all namespaces (also 0)
@@ -801,6 +821,7 @@ Explore
   m / :metrics       Toggle pod/node CPU and memory columns
   s / :shell         Shell in a running pod/container; Ctrl+] disconnects
   f                  Forward a pod/service port (LOCAL:REMOTE; LOCAL 0 auto)
+  x (pod/service)    Stop forwards for the selected resource
   F / :forwards      Manage forwards; x stops the selected forward
   Logs: c / p / w    Select container / previous instance / wrap; Ctrl+R reloads
   e / :edit          Edit fresh resource in configured editor or $EDITOR

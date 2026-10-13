@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -13,18 +14,20 @@ import (
 )
 
 type forwardSession struct {
-	id     uint64
-	target string
-	local  uint16
-	remote int
-	state  string
-	cancel context.CancelFunc
-	events chan forwardMsg
+	id                uint64
+	target            string
+	sourceKey, podKey string
+	local             uint16
+	remote            int
+	state             string
+	cancel            context.CancelFunc
+	events            chan forwardMsg
 }
 type forwardMsg struct {
 	generation, id uint64
 	local          uint16
 	pod            string
+	podKey         string
 	remote         int
 	done           bool
 	err            error
@@ -94,7 +97,7 @@ func (m *model) forwardCommand(value string) tea.Cmd {
 	}
 	ctx, cancel := context.WithCancel(m.session.ctx)
 	m.forwardID++
-	f := &forwardSession{id: m.forwardID, target: target.GetNamespace() + "/" + target.GetName(), local: uint16(local), remote: remote, state: "starting", cancel: cancel, events: make(chan forwardMsg, 2)}
+	f := &forwardSession{id: m.forwardID, target: target.GetNamespace() + "/" + target.GetName(), sourceKey: kube.Identity(target), local: uint16(local), remote: remote, state: "starting", cancel: cancel, events: make(chan forwardMsg, 2)}
 	if len(m.forwards) >= 128 {
 		ids := make([]uint64, 0, len(m.forwards))
 		for id := range m.forwards {
@@ -120,7 +123,7 @@ func (m *model) forwardCommand(value string) tea.Cmd {
 		done()
 		if err == nil {
 			err = backend.Forward(ctx, pod, fmt.Sprintf("%d:%d", local, port), func(actual uint16) {
-				f.events <- forwardMsg{generation: g, id: id, local: actual, pod: pod.GetNamespace() + "/" + pod.GetName(), remote: port}
+				f.events <- forwardMsg{generation: g, id: id, local: actual, pod: pod.GetNamespace() + "/" + pod.GetName(), podKey: kube.Identity(pod), remote: port}
 			})
 		}
 		f.events <- forwardMsg{generation: g, id: id, done: true, err: err}
@@ -143,18 +146,21 @@ func (m *model) forwardUpdate(v forwardMsg) tea.Cmd {
 		return nil
 	}
 	if v.done {
+		stopping := f.state == "stopping"
 		f.cancel()
 		f.state = "stopped"
-		if v.err != nil && v.err != context.Canceled {
+		if v.err != nil && !stopping && !errors.Is(v.err, context.Canceled) {
 			f.state = "failed: " + kube.Safe(v.err.Error())
 			m.notice = fmt.Sprintf("Port forward #%d · %s", f.id, f.state)
+		} else {
+			m.notice = fmt.Sprintf("Port forward #%d stopped", f.id)
 		}
 	} else {
-		f.local, f.remote, f.target = v.local, v.remote, v.pod
+		f.local, f.remote, f.target, f.podKey = v.local, v.remote, v.pod, v.podKey
 		if f.state != "stopping" {
 			f.state = "active"
+			m.notice = fmt.Sprintf("Forward #%d · 127.0.0.1:%d → %s:%d · :forwards", f.id, f.local, f.target, f.remote)
 		}
-		m.notice = fmt.Sprintf("Forward #%d · 127.0.0.1:%d → %s:%d · :forwards", f.id, f.local, f.target, f.remote)
 	}
 	if m.mode == "picker" && m.pickerKind == "forwards" {
 		m.refreshForwardChoices()
@@ -168,12 +174,36 @@ func (m *model) forwardUpdate(v forwardMsg) tea.Cmd {
 	return nil
 }
 func (m *model) stopForward(id uint64) {
-	if f := m.forwards[id]; f != nil {
+	if f := m.forwards[id]; f != nil && (f.state == "starting" || f.state == "active") {
+		f.state = "stopping"
 		f.cancel()
-		if f.state == "starting" || f.state == "active" {
-			f.state = "stopping"
-		}
 		m.notice = fmt.Sprintf("Stopping port forward #%d", id)
+	}
+}
+
+func (m *model) resourceForwards() []uint64 {
+	o, ok := m.current()
+	if !ok || (o.GetKind() != "Pod" && o.GetKind() != "Service") {
+		return nil
+	}
+	key := kube.Identity(o)
+	var ids []uint64
+	for id, f := range m.forwards {
+		if (f.sourceKey == key || f.podKey == key) && (f.state == "starting" || f.state == "active") {
+			ids = append(ids, id)
+		}
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+func (m *model) stopResourceForwards() {
+	ids := m.resourceForwards()
+	for _, id := range ids {
+		m.stopForward(id)
+	}
+	if len(ids) > 1 {
+		m.notice = fmt.Sprintf("Stopping %d port forwards for selected resource", len(ids))
 	}
 }
 func (m *model) stopForwards() {
@@ -182,6 +212,10 @@ func (m *model) stopForwards() {
 	}
 }
 func (m *model) refreshForwardChoices() {
+	selected := ""
+	if m.pickerIndex < len(m.matches) {
+		selected = m.matches[m.pickerIndex].name
+	}
 	m.choices = nil
 	ids := make([]uint64, 0, len(m.forwards))
 	for id := range m.forwards {
@@ -194,6 +228,12 @@ func (m *model) refreshForwardChoices() {
 		}
 	}
 	m.filterChoices()
+	for i, c := range m.matches {
+		if c.name == selected {
+			m.pickerIndex = i
+			break
+		}
+	}
 }
 func (m *model) promptForward() tea.Cmd {
 	o, ok := m.current()

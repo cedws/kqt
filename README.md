@@ -71,6 +71,7 @@ picker opens. UI preferences never silently select a different Kubernetes contex
 | `j/k`, arrows; `g/G`; `Ctrl+U/D` | Move, jump, page |
 | `h/l`, arrows | Scroll wide tables or manifests |
 | `:`; `Tab` / `Shift+Tab` | Command prompt; cycle completions forward / back |
+| `Up` / `Down` in `:` | Recall the last 50 submitted commands |
 | `/` | Fuzzy search; `web0003` matches `web-7c9f6d8b5-0003` |
 | `n`, `:ns` | Namespace table; Enter selects one |
 | `:ns apps`, `:ns -A`, `0` | Set namespace / all namespaces |
@@ -86,6 +87,7 @@ picker opens. UI preferences never silently select a different Kubernetes contex
 | `m`, `:metrics on` / `off` | Toggle pod/node CPU and memory columns |
 | `s`, `:shell` | Open a shell in a running pod/container |
 | `f`, `:forward LOCAL:REMOTE` | Forward a pod/service port to localhost |
+| `x` on a pod/service | Stop forwards associated with the selected resource |
 | `F`, `:forwards` | View/manage forwards; `x` stops the selected forward |
 | `e`, `:edit` | Open the selected resource in your editor |
 | `t`, `:themes` | Fuzzy theme picker with reversible previews |
@@ -102,6 +104,12 @@ Completion covers commands, resource names and aliases, theme/layout names,
 contexts, known namespaces, and inspector/sort options. Tab only fills the
 prompt; Enter executes. Printable navigation keys stay text in input fields.
 Pickers use arrows or `Ctrl+J/K` while you type to search.
+
+In the command prompt, Up recalls older commands and Down recalls newer ones.
+Down past the newest entry restores your unfinished command and cursor position.
+Recalling a command only fills the prompt; Enter executes it. The last 50 nonempty
+submitted commands are saved as `command_history` in your config file and remain
+available after restarting. Cancelled commands and search text are not recorded.
 
 Examples: `:po`, `:deploy`, `:sts`, `:svc`, `:nodes`, `:pvc`, `:events`, `:crd`,
 `:widgets.example.com`. Discovery uses preferred API versions, including CRDs.
@@ -240,7 +248,11 @@ local address are shown when ready. The selected pod stays fixed for that forwar
 
 `F` / `:forwards` lists active and recently completed forwards. Select one to
 inspect its destination and status; `x` stops it. `:forward stop ID` and
-`:forward stop all` also work. Listeners bind only to `127.0.0.1`. Up to 16 forwards
+`:forward stop all` also work. On a selected pod or service in the resource list
+or its YAML/JSON details, `x` stops all forwards associated with that resource.
+Service forwards can also be stopped from their resolved target pod. Cancellation
+shows `stopping` until the listener closes, then `stopped`; it does not change
+unrelated forwards. Listeners bind only to `127.0.0.1`. Up to 16 forwards
 can run concurrently; namespace changes retain them, context changes and quitting
 close them. Forwarding uses native client-go. Shells and forwards try WebSocket
 transport with SPDY fallback for compatible upgrade/proxy failures.
@@ -326,7 +338,7 @@ columns, sorting, and wide mode. `:layouts` searches all built-in and saved name
 right inspector; full-screen details stay available.
 
 `:columns name,status,age` saves columns for the active layout. `:sort age` and
-`S` change sorting; `:write NAME` includes that sort in the saved profile.
+`O` / `R` change sorting; `:write NAME` includes that sort in the saved profile.
 JSON Pointer columns such as `/spec/replicas` and
 `/metadata/labels/app.kubernetes.io~1name` are supported. Numeric fields sort
 numerically; age uses creation time.

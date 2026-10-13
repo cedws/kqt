@@ -117,6 +117,9 @@ type model struct {
 	themeUntil                               time.Time
 	themeTimer                               uint64
 	completion                               completionState
+	commandHistoryIndex                      int
+	commandDraft                             string
+	commandDraftCursor                       int
 	editToken                                uint64
 	editCancel                               context.CancelFunc
 	editBuffer                               *editBuffer

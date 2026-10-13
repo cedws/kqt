@@ -373,6 +373,11 @@ func (m *model) View() tea.View {
 		if m.inspectorFocused {
 			help = " j/k scroll  Ctrl+U/D page  g/G ends  Tab/Esc list  ? help  q quit"
 		}
+		if m.mode == "command" {
+			help = " ↑/↓ history  Tab/Shift+Tab complete  Enter run  Esc cancel"
+		} else if m.mode == "" && len(m.resourceForwards()) > 0 {
+			help = " x stop forwards for resource  F manage forwards  : command  ? help  q quit"
+		}
 		if o, ok := m.current(); ok && o.GetKind() == "Secret" && (m.mode == "" || m.mode == "details") {
 			action := "reveal"
 			if m.secretTarget != "" {

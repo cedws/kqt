@@ -45,6 +45,7 @@ type config struct {
 	Refresh         string                   `toml:"refresh_interval" yaml:"refresh_interval"`
 	Editor          string                   `toml:"editor,omitempty" yaml:"editor,omitempty"`
 	Shell           string                   `toml:"shell,omitempty" yaml:"shell,omitempty"`
+	CommandHistory  []string                 `toml:"command_history,omitempty" yaml:"command_history,omitempty"`
 	Views           map[string]viewConfig    `toml:"views,omitempty" yaml:"views,omitempty"`
 	Layouts         map[string]layoutProfile `toml:"layouts,omitempty" yaml:"layouts,omitempty"`
 	Contexts        map[string]contextState  `toml:"contexts,omitempty" yaml:"contexts,omitempty"`
@@ -144,6 +145,7 @@ func LoadSettings(path string) (*Settings, error) {
 	if c.Contexts == nil {
 		c.Contexts = map[string]contextState{}
 	}
+	c.CommandHistory = boundedCommandHistory(c.CommandHistory)
 	if c.Version != 1 {
 		return nil, fmt.Errorf("config version must be 1")
 	}

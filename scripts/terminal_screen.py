@@ -2,7 +2,7 @@
 import re
 import unicodedata
 
-def screen(raw, width=80, height=24):
+def screen(raw, width=80, height=24, resize_events=()):
     grid = [[' ']*width for _ in range(height)]
     row, col = 0, 0
     top, bottom = 0, height-1
@@ -16,8 +16,26 @@ def screen(raw, width=80, height=24):
         if row == bottom: scroll_region(1)
         else: row = min(height-1, row+1)
     text = raw.decode('utf8', errors='ignore')
+    # Keep the dimensions that applied when each byte was emitted. Replaying
+    # pre-resize output at the final width changes wrapping and scroll positions.
+    events = [(len(raw[:offset].decode('utf8', errors='ignore')), w, h)
+              for offset, w, h in resize_events]
+    event_index = 0
     i = 0
-    while i < len(text):
+    while i <= len(text):
+        while event_index < len(events) and events[event_index][0] <= i:
+            _, new_width, new_height = events[event_index]
+            old_height = height
+            grid = [line[:new_width] + [' ']*max(0, new_width-width)
+                    for line in grid[:new_height]]
+            grid += [[' ']*new_width for _ in range(max(0, new_height-height))]
+            width, height = new_width, new_height
+            row, col = min(row, height-1), min(col, width)
+            top = min(top, height-1)
+            bottom = height-1 if bottom == old_height-1 else min(bottom, height-1)
+            event_index += 1
+        if i == len(text):
+            break
         if text[i] == '\x1b':
             match = re.match(r'\x1b\[([0-9;?:><]*)([ -/]*)([@-~])', text[i:])
             if match:

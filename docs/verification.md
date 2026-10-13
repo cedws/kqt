@@ -242,3 +242,33 @@ includes both EOF and still-open stream errors, retains the checkpoint/count/
 scope assertions, and reports the received states on timeout. Ten repeated race
 runs passed on macOS, and the full race suite passed in a Linux amd64 Go 1.27.1
 container.
+
+## Command history and forwarding cancellation (2026-10-13)
+
+The colon prompt retains the last 50 nonempty submitted commands in the config's
+`command_history`. Up/Down recall older/newer entries without executing them;
+returning past the newest entry restores the unfinished draft and its cursor.
+Cancelled input and search text are excluded. Coverage includes the limit,
+restart restoration, YAML/TOML saves, comment and editor-setting preservation,
+completion after recall, and input isolation.
+
+Forward cancellation now works from the selected pod/service's resource list
+and details, as well as the forwards picker and its detail panel. Source and
+resolved-pod UIDs keep service forwards associated with the correct resource;
+recreated resources and unrelated forwards are excluded. Regression checks
+cover wrapped cancellation errors, late readiness after a stop, genuine failure
+reporting, and preserving the selected forward when filtered results change.
+
+The terminal harness records window-size changes at transcript byte offsets so
+old output retains its original wrapping during replay. Fixtures cover ASCII,
+Unicode and colour sequences, scroll regions, and resizing without new output.
+Live operator checks exercise real pod and service traffic, stop forwards using
+`x` in the resource list, forwards list, and forward details, verify closed TCP
+listeners, and check cleanup on quit.
+
+The full race suite, static checks, eight Python tests, three-layout demo PTY
+checks and restart checks passed. The demo and live operator PTY checks passed,
+including history recall and draft restoration, pod/service cancellation from
+each supported view, resize replay, terminal restoration, and cleanup on quit.
+Live API checks passed with WebSocket and forced SPDY fallback in a disposable
+Kubernetes v1.36.2+k3s1 cluster; the cluster and its volumes were removed.
