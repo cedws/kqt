@@ -14,5 +14,12 @@ Only palette values are adapted; no editor plugin code is included.
 | Tokyo Night | https://github.com/folke/tokyonight.nvim | [Apache-2.0](licenses/tokyo-night.txt) |
 | One Dark | https://github.com/atom/one-dark-syntax | [MIT](licenses/one-dark.txt) |
 | Solarized | https://github.com/altercation/solarized | [MIT](licenses/solarized.txt) |
+| Ayu (Dark, Mirage, Light) | [ayu-colors](https://github.com/ayu-theme/ayu-colors/tree/b0fd979a1ddf050101b43311fa598a1a9c5f1bbc) | [MIT](licenses/ayu.txt) |
+| Everforest (Dark/Light, Hard/Medium/Soft) | [Everforest palette](https://github.com/sainnhe/everforest/blob/85a86eb62409e3ec88713bff3d1b9d7374e112e4/palette.md) | [MIT](licenses/everforest.txt) |
+
+Ayu's translucent selection backgrounds are composited into opaque terminal
+colours. Muted/foreground and status/accent colours are adjusted where needed
+for readable contrast. Everforest retains all six background variants;
+selection uses the corresponding popup background.
 
 Retain these notices when distributing the bundled palettes.

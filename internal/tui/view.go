@@ -64,6 +64,9 @@ func (m *model) resize() {
 	if m.showingLogs() || m.showingEventPanel() {
 		panelWidth, panelHeight = m.width-2, m.height-8
 	}
+	if m.showingEventPanel() {
+		panelHeight-- // Pinned resource tabs above the scrolling viewport.
+	}
 	m.panel.SetWidth(max(1, panelWidth))
 	m.panel.SetHeight(max(1, panelHeight))
 	d := m.inspectorDimensions()
@@ -322,7 +325,11 @@ func (m *model) View() tea.View {
 			if m.showingLogs() {
 				title = m.panelTitle + " · Esc close · hjkl scroll · c container · p previous · Ctrl+R reload"
 			}
-			body = m.frame(title, m.panel.View(), w, bodyHeight, true)
+			panel := m.panel.View()
+			if m.showingEventPanel() {
+				panel = m.resourcePanelTabs() + "\n" + panel
+			}
+			body = m.frame(title, panel, w, bodyHeight, true)
 			body = lipgloss.NewStyle().Background(m.theme.color("surface")).Foreground(m.theme.color("foreground")).Render(body)
 		} else if d.width > 0 {
 			if d.bottom {
@@ -409,7 +416,10 @@ func (m *model) View() tea.View {
 			help = " Space pause  / search  f live/snapshot  o save  c container  p previous  Esc close"
 		}
 		if m.showingEventPanel() {
-			help = " Space pause  / filter  o save  G follow  Ctrl+R reload  Esc close"
+			help = " 1–4 tabs  Tab cycle  Space pause  / filter  o save  G follow  Ctrl+R reload  Esc close"
+			if m.resourcePanelTab != resourceStatusTab {
+				help = " 1–4 tabs  Tab/Shift+Tab cycle  j/k scroll  o save  Ctrl+R reload  Esc close"
+			}
 		} else if m.eventGlobal && m.mode == "" && !m.inspectorFocused {
 			help = " Space pause  / filter  o save  G follow  0 all namespaces  : command  q quit"
 		}

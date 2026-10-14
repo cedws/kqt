@@ -22,6 +22,9 @@ type eventsMsg struct {
 }
 
 func (m *model) openEvents() tea.Cmd {
+	return m.openResourcePanel(resourceStatusTab)
+}
+func (m *model) openResourcePanel(tab resourcePanelTab) tea.Cmd {
 	target, ok := m.current()
 	if !ok || m.backend == nil {
 		return nil
@@ -29,17 +32,20 @@ func (m *model) openEvents() tea.Cmd {
 	m.clearSecret()
 	m.updateInspector()
 	m.eventObject = target
+	m.resourcePanelTab = tab
 	return m.loadEvents()
 }
 func (m *model) loadEvents() tea.Cmd {
+	tab := m.resourcePanelTab
 	m.closeEvents()
+	m.resourcePanelTab = tab
 	m.eventStore = newEventBuffer()
 	m.eventState = "connecting"
 	m.mode = "events"
 	m.resize()
 	m.panel.SoftWrap = true
-	m.panelTitle = "Status & Events · " + m.eventObject.GetName()
-	m.panel.SetContent("Loading status and events…")
+	m.eventTitle()
+	m.panel.SetContent("Loading resource…")
 	m.panel.GotoTop()
 	ctx, cancel := context.WithTimeout(m.session.ctx, 15*time.Second)
 	m.eventCancel = cancel
@@ -73,6 +79,7 @@ func (m *model) closeEvents() {
 	m.eventGlobal, m.eventPaused, m.eventTail = false, false, false
 	m.eventState, m.eventError, m.eventStatusError, m.eventSearch = "", "", "", ""
 	m.eventDropped, m.eventGaps = 0, 0
+	m.resourcePanelTab = resourceStatusTab
 }
 func (m *model) toggleMetrics() tea.Cmd {
 	m.stopResourceWatch()

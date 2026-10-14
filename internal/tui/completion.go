@@ -11,7 +11,7 @@ type completionState struct {
 	index   int
 }
 
-var commandNames = []string{"overview", "access", "can-i", "permissions", "actions", "api", "delete", "restart", "resume", "run", "scale", "suspend", "columns", "copy", "context", "contexts", "ctx", "edit", "events", "export", "forward", "forwards", "help", "inspector", "label", "labels", "layout", "layouts", "logs", "metrics", "namespace", "ns", "q", "quit", "refresh", "related", "relations", "resources", "shell", "sort", "status", "theme", "themes", "write"}
+var commandNames = []string{"overview", "access", "can-i", "permissions", "actions", "api", "delete", "restart", "resume", "run", "scale", "suspend", "columns", "copy", "context", "contexts", "ctx", "edit", "events", "export", "forward", "forwards", "help", "inspector", "label", "labels", "layout", "layouts", "logs", "metadata", "metrics", "namespace", "ns", "q", "quit", "refresh", "related", "relations", "resources", "shell", "sort", "status", "theme", "themes", "write"}
 
 func (m *model) completeCommand(reverse bool) {
 	value := m.input.Value()
@@ -75,6 +75,8 @@ func (m *model) completeCommand(reverse bool) {
 				names = []string{"previous"}
 			case "events":
 				names = []string{"selected"}
+			case "metadata":
+				names = []string{"labels", "annotations", "finalizers", "status"}
 			case "metrics":
 				names = []string{"on", "off"}
 			case "forward":

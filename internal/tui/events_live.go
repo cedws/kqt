@@ -108,9 +108,14 @@ func (m *model) eventViewState() string {
 
 func (m *model) eventTitle() {
 	if !m.eventGlobal {
-		m.panelTitle = "Status & Events · " + m.eventObject.GetName() + " · " + m.eventViewState()
-		if m.eventSearch != "" {
-			m.panelTitle += " · /" + kube.Safe(m.eventSearch)
+		m.panelTitle = m.resourcePanelTab.title() + " · " + m.eventObject.GetName()
+		if m.resourcePanelTab == resourceStatusTab {
+			m.panelTitle += " · " + m.eventViewState()
+			if m.eventSearch != "" {
+				m.panelTitle += " · /" + kube.Safe(m.eventSearch)
+			}
+		} else if m.eventPaused {
+			m.panelTitle += " · paused"
 		}
 	}
 }
@@ -198,22 +203,31 @@ func (m *model) renderEventPanel() {
 	if m.eventError != "" {
 		eventError = fmt.Errorf("%s", m.eventError)
 	}
-	content := m.renderResourceStatus(m.eventObject, events, eventError)
-	if m.eventStatusError != "" {
-		content = m.theme.style("warning").Render("STALE RESOURCE STATUS · "+kube.Safe(m.eventStatusError)) + "\n\n" + content
+	var content string
+	if m.resourcePanelTab == resourceStatusTab {
+		content = m.renderResourceStatus(m.eventObject, events, eventError)
+	} else {
+		content = m.renderResourceMetadata(m.eventObject, m.resourcePanelTab)
 	}
-	if dropped := m.eventDropped + m.eventStore.dropped; dropped > 0 {
+	if m.eventStatusError != "" {
+		stale := "STALE RESOURCE STATUS"
+		if m.resourcePanelTab != resourceStatusTab {
+			stale = "STALE RESOURCE METADATA"
+		}
+		content = m.theme.style("warning").Render(stale+" · "+kube.Safe(m.eventStatusError)) + "\n\n" + content
+	}
+	if dropped := m.eventDropped + m.eventStore.dropped; dropped > 0 && m.resourcePanelTab == resourceStatusTab {
 		content += fmt.Sprintf("\n[kqt] %d older/oversized event records omitted (4 MiB / 2,000 record buffer).", dropped)
 	}
-	if m.eventGaps > 0 {
+	if m.eventGaps > 0 && m.resourcePanelTab == resourceStatusTab {
 		content += fmt.Sprintf("\n[kqt] Event history resynced %d time(s); some events may have been missed.", m.eventGaps)
 	}
-	if query != "" && len(events) == 0 {
+	if query != "" && len(events) == 0 && m.resourcePanelTab == resourceStatusTab {
 		content += "\nNo events match this filter. Waiting for new output…"
 	}
 	offset := m.panel.YOffset()
 	m.panel.SetContent(content)
-	if m.eventTail {
+	if m.eventTail && m.resourcePanelTab == resourceStatusTab {
 		m.panel.GotoBottom()
 	} else {
 		m.panel.SetYOffset(offset)
@@ -269,6 +283,32 @@ func (m *model) eventStatusResult(v eventStatusMsg) tea.Cmd {
 }
 
 func (m *model) eventsKey(k string) tea.Cmd {
+	if !m.eventGlobal {
+		tab := m.resourcePanelTab
+		switch k {
+		case "1", "S", "E":
+			tab = resourceStatusTab
+		case "2", "M":
+			tab = resourceLabelsTab
+		case "3":
+			tab = resourceAnnotationsTab
+		case "4":
+			tab = resourceFinalizersTab
+		case "tab":
+			tab = (tab + 1) % resourcePanelTabCount
+		case "shift+tab":
+			tab = (tab + resourcePanelTabCount - 1) % resourcePanelTabCount
+		default:
+			tab = resourcePanelTabCount
+		}
+		if tab != resourcePanelTabCount {
+			m.resourcePanelTab = tab
+			m.eventTail = false
+			m.panel.GotoTop()
+			m.renderEventPanel()
+			return nil
+		}
+	}
 	switch k {
 	case "space", " ":
 		m.eventPaused = !m.eventPaused
@@ -285,7 +325,7 @@ func (m *model) eventsKey(k string) tea.Cmd {
 			scroll(&m.inspector, k)
 			return nil
 		}
-		m.eventTail = true
+		m.eventTail = m.eventGlobal || m.resourcePanelTab == resourceStatusTab
 		if m.eventGlobal {
 			m.followLatestEvent()
 		} else {
@@ -298,7 +338,7 @@ func (m *model) eventsKey(k string) tea.Cmd {
 	case "o":
 		return m.eventsInput("event-save")
 	case "/":
-		if !m.eventGlobal {
+		if !m.eventGlobal && m.resourcePanelTab == resourceStatusTab {
 			return m.eventsInput("event-search")
 		}
 	case "ctrl+r":
@@ -317,6 +357,9 @@ func (m *model) eventsInput(mode string) tea.Cmd {
 	if mode == "event-save" {
 		m.input.Prompt = "Save to: "
 		value = "kqt-events.log"
+		if !m.eventGlobal && m.resourcePanelTab != resourceStatusTab {
+			value = "kqt-" + strings.ToLower(m.resourcePanelTab.title()) + ".txt"
+		}
 	}
 	m.input.SetValue(value)
 	m.input.CursorEnd()

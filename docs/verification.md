@@ -358,3 +358,24 @@ and forward cleanup, external watch-driven table/JSON updates, limited-reader
 permission and overview checks, and workload mutations. Its disposable cluster,
 network and volumes were removed. FreeBSD/Linux runtime and terminal clipboard
 acceptance remain platform-specific qualification limits.
+
+## v0.2.0: metadata tabs and additional themes
+
+Metadata checks cover fresh resource reads, labels/annotations/finalizers,
+sorted keys, multiline and Unicode values, empty sections, terminal-control
+sanitization, Secret redaction, private active-tab exports, and obsolete replies.
+Tab switching retains the resource and event session; metadata does not follow
+hidden events. Refresh preserves the active tab. Pinned tabs and content fit
+40x12, 80x24, and 180x48 terminals.
+
+Ayu Dark/Light/Mirage and all six Everforest background variants bring the
+bundled theme count to 27. YAML/JSON/log highlighting checks cover every theme.
+An isolated demo terminal verified all nine new themes through the picker,
+saved preferences, JSON and metadata views, cancelled previews, and terminal
+restoration. Foreground, muted, accent, and status text contrast was checked
+against both panel and main backgrounds; the selected-row foreground was also
+checked. All new palettes meet 4.5:1 for those text/background pairs.
+
+The full race/static/Python suite, three-layout and restart terminal checks,
+operator checks (including metadata tabs, reload and export), and all six
+existing feature terminal workflows passed before the release commit.

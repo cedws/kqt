@@ -172,6 +172,7 @@ type model struct {
 	usage                                    map[string]kube.Usage
 	metricsWarning                           string
 	eventObject                              unstructured.Unstructured
+	resourcePanelTab                         resourcePanelTab
 	eventToken                               uint64
 	eventCancel                              context.CancelFunc
 	eventContext                             context.Context
@@ -769,7 +770,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case eventsMsg:
 		if v.generation == m.generation && v.token == m.eventToken && m.showingEventPanel() {
 			if v.err != nil {
-				m.panel.SetContent("Unable to read status: " + kube.Safe(v.err.Error()) + "\n\nCtrl+R retries; Esc closes.")
+				m.panel.SetContent("Unable to read resource: " + kube.Safe(v.err.Error()) + "\n\nCtrl+R retries; Esc closes.")
 			} else {
 				m.eventObject = v.object
 				m.eventStore = newEventBuffer()
@@ -793,10 +794,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if v.generation != m.generation || v.token != m.eventToken {
 			return m, nil
 		}
+		label := "events"
+		if !m.eventGlobal && m.resourcePanelTab != resourceStatusTab {
+			label = "metadata"
+		}
 		if v.err != nil {
-			m.notice = "Unable to save events: " + kube.Safe(v.err.Error())
+			m.notice = "Unable to save " + label + ": " + kube.Safe(v.err.Error())
 		} else {
-			m.notice = "Events saved to " + kube.Safe(v.path)
+			m.notice = strings.Title(label) + " saved to " + kube.Safe(v.path)
 		}
 	case shellClosedMsg:
 		return m, m.shellClosed(v)

@@ -345,6 +345,8 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		return m.openLogs(true)
 	case "S", "E":
 		return m.openEvents()
+	case "M":
+		return m.openResourcePanel(resourceLabelsTab)
 	case "m":
 		return m.toggleMetrics()
 	case "f":
@@ -643,6 +645,21 @@ func (m *model) command(value string) tea.Cmd {
 		return m.changeResource("events", true)
 	case "status":
 		return m.openEvents()
+	case "metadata":
+		tab := resourceLabelsTab
+		switch arg {
+		case "", "labels":
+		case "annotations":
+			tab = resourceAnnotationsTab
+		case "finalizers":
+			tab = resourceFinalizersTab
+		case "status":
+			tab = resourceStatusTab
+		default:
+			m.notice = "Use :metadata labels, annotations, finalizers, or status"
+			return nil
+		}
+		return m.openResourcePanel(tab)
 	case "metrics":
 		if arg == "on" {
 			m.metricsEnabled = false
@@ -909,6 +926,8 @@ Explore
   Secrets: x         Toggle decoded values; hidden by default
   L / P              Logs / previous logs: pod, deployment, statefulset
   S / :status        Status, conditions, containers, and live events (E also works)
+  M / :metadata      Labels, annotations and finalizers in the status panel
+  Resource panel     1 status, 2 labels, 3 annotations, 4 finalizers; Tab cycles
   :events            Live namespace event table (0 = all namespaces)
   Events             Space pause, / filter, G follow latest, o save
   m / :metrics       Toggle pod/node CPU and memory columns

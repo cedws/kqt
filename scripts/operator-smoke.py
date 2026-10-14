@@ -106,6 +106,16 @@ def run(root, bad_shell=False):
         else:
             send(b'S'); expect('Status & Events'); expect('Containers')
             expect('live')
+            send(b'2'); expect('Labels ('); expect('[2 Labels]')
+            send(b'\t'); expect('Annotations ('); expect('[3 Annotations]')
+            send(b'\t'); expect('Finalizers ('); expect('[4 Finalizers]')
+            send(b'\x1b[Z'); expect('Annotations (')
+            destination = root / 'metadata.txt'
+            send(b'o'); send(b'\x01\x0b' + str(destination).encode() + b'\r')
+            expect('Metadata saved to')
+            assert 'Annotations (' in destination.read_text() and 'Containers' not in destination.read_text(), 'metadata export lost the active tab'
+            assert destination.stat().st_mode & 0o777 == 0o600, 'metadata export is not private'
+            send(b'1'); expect('Containers')
             send(b'G'); expect('kqt-event-marker' if args.kubeconfig else 'Back-off restarting')
             if not args.kubeconfig:
                 expect('demo event heartbeat')
@@ -122,6 +132,8 @@ def run(root, bad_shell=False):
                 assert 'demo event heartbeat' in destination.read_text(), 'event export lost displayed lines'
                 assert destination.stat().st_mode & 0o777 == 0o600, 'event export is not private'
             send(b'g'); expect('Pod IP'); send(b'\x1b')
+            send(b'M'); expect('Labels ('); send(b'\x12'); expect('Labels ('); send(b'\x1b')
+            send(b':metadata finalizers\r'); expect('Finalizers ('); send(b'\x1b')
             send(b'm'); expect('CPU'); expect('MEMORY'); send(b'm')
             send(b'L')
             if not args.kubeconfig:

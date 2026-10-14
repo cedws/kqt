@@ -31,9 +31,9 @@ With mise and just, use `just build`, `just demo`, and `just check`.
 
 The **Build binaries** GitHub workflow runs on pushes (including tags), pull
 requests, and manual dispatch. Pushing a [SemVer](https://semver.org/) tag such as
-`v0.1.0` creates a [GitHub release](https://github.com/z0mbix/kqt/releases) after
+`v0.2.0` creates a [GitHub release](https://github.com/z0mbix/kqt/releases) after
 the tests and all six builds pass. Tags with prerelease identifiers, such as
-`v0.1.0-rc.1`, create prereleases. Invalid version tags fail before building.
+`v0.2.0-rc.1`, create prereleases. Invalid version tags fail before building.
 Download the matching release archive, or use the workflow run's **Artifacts**
 section for development builds:
 
@@ -89,6 +89,7 @@ picker opens. UI preferences never silently select a different Kubernetes contex
 | `L`, `P` | Live logs / previous log snapshots from a pod, deployment, or statefulset |
 | `Space`, `/`, `f`, `o` in logs | Pause, search, switch live/snapshot, save displayed logs |
 | `S` (also `E`), `:status`, `:events selected` | Readable status, conditions, containers, and live events |
+| `M`, `:metadata` | Resource labels, annotations and finalizers in the same panel |
 | `m`, `:metrics on` / `off` | Toggle pod/node CPU and memory columns |
 | `s`, `:shell` | Open a shell in a running pod/container |
 | `f`, `:forward LOCAL:REMOTE` | Forward a pod/service port to localhost |
@@ -199,6 +200,14 @@ workload replica counts, and conditions with reasons, messages, and transition
 times. Colours distinguish readiness from failure/pressure predicates; unknown
 custom conditions retain neutral colours. Other custom-resource status fields
 appear as highlighted YAML. Resources without status say so explicitly.
+
+The same panel includes **Labels**, **Annotations**, and **Finalizers** tabs.
+Press `M` (or `:metadata`) on a resource to open Labels directly; use `1` for
+Status, `2` for Labels, `3` for Annotations, and `4` for Finalizers, or cycle with
+`Tab` / `Shift+Tab`. The tab bar stays visible while scrolling. Metadata refreshes
+with the resource; keys are sorted and multiline annotation values remain readable.
+Empty sections say so explicitly. `:metadata annotations` and `:metadata finalizers`
+open those tabs directly. `o` saves the active tab to a private file.
 
 Events follow below, matched by immutable UID and updated live. Status refreshes
 at the configured interval; events appear oldest first so new activity follows
@@ -350,7 +359,12 @@ JSON Pointer columns such as `/spec/replicas` and
 `/metadata/labels/app.kubernetes.io~1name` are supported. Numeric fields sort
 numerically; age uses creation time.
 
-All 18 Maestro palettes are bundled. `kqt themes` lists them. `--theme`
+The original 18 Maestro palettes plus Ayu and Everforest are bundled (27 themes
+in total). Ayu includes `ayu-dark`, `ayu-mirage`, and `ayu-light`. Everforest
+includes `everforest-dark-hard`, `everforest-dark-medium`, `everforest-dark-soft`,
+and the matching `everforest-light-*` variants. Use `:themes` to preview them or
+set one directly, for example `:theme ayu-mirage` or
+`:theme everforest-dark-medium`. `kqt themes` lists them. `--theme`
 overrides `KQT_THEME`, which overrides the saved theme. Custom themes retain the
 Maestro TOML format under `themes/NAME.toml` beside the settings file:
 

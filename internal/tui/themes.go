@@ -46,6 +46,15 @@ func builtThemes() map[string]theme {
 		palette("one-dark", "#282c34", "#21252b", "#abb2bf", "#9da5b4", "#5c6370", "#61afef", "#3e4451", "#98c379", "#e5c07b", "#e06c75"),
 		palette("solarized-dark", "#002b36", "#073642", "#93a1a1", "#839496", "#586e75", "#2aa198", "#073642", "#859900", "#b58900", "#dc322f"),
 		palette("solarized-light", "#fdf6e3", "#eee8d5", "#586e75", "#657b83", "#93a1a1", "#006c99", "#eee8d5", "#586e00", "#856300", "#c12d2a"),
+		palette("ayu-dark", "#10141c", "#0d1017", "#bfbdb6", "#8a91a1", "#414b5e", "#e6b450", "#193155", "#aad94c", "#ffb454", "#d95757"),
+		palette("ayu-mirage", "#242936", "#1f2430", "#cccac2", "#949cab", "#49566e", "#ffcc66", "#2b4768", "#d5ff80", "#ffcd66", "#ff6666"),
+		palette("ayu-light", "#fcfcfc", "#f8f9fa", "#5c6166", "#677485", "#abb4be", "#a15b00", "#d7e4f6", "#587700", "#986800", "#c83f3f"),
+		palette("everforest-dark-hard", "#272e33", "#1e2326", "#d3c6aa", "#9da9a0", "#7a8478", "#a7c080", "#374145", "#83c092", "#dbbc7f", "#e67e80"),
+		palette("everforest-dark-medium", "#2d353b", "#232a2e", "#d3c6aa", "#9da9a0", "#7a8478", "#a7c080", "#3d484d", "#83c092", "#dbbc7f", "#e67e80"),
+		palette("everforest-dark-soft", "#333c43", "#293136", "#d3c6aa", "#9da9a0", "#7a8478", "#a7c080", "#434f55", "#83c092", "#dbbc7f", "#ed8e8f"),
+		palette("everforest-light-hard", "#fffbef", "#f2efdf", "#536169", "#5e6b5c", "#939f91", "#596900", "#f2efdf", "#216b4f", "#7f5b00", "#b73735"),
+		palette("everforest-light-medium", "#fdf6e3", "#efebd4", "#536169", "#5e6b5c", "#939f91", "#596900", "#efebd4", "#216b4f", "#7f5b00", "#b73735"),
+		palette("everforest-light-soft", "#f3ead3", "#e5dfc5", "#536169", "#576354", "#939f91", "#596900", "#e5dfc5", "#216b4f", "#7f5b00", "#a92f2d"),
 	}
 	result := map[string]theme{}
 	for _, t := range values {
