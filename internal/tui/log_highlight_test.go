@@ -135,6 +135,7 @@ func TestMixedLogDisplaySearchExportAndThemeChanges(t *testing.T) {
 func TestLogHighlightCacheFollowsBufferLifetime(t *testing.T) {
 	m := demoModel(t)
 	m.mode = "logs"
+	m.logSearch = "!missing"
 	m.logFeed = newLogFeed()
 	for i := 0; i < logBufferLines; i++ {
 		m.logFeed.append(fmt.Sprintf("INFO line %d", i))
@@ -144,14 +145,17 @@ func TestLogHighlightCacheFollowsBufferLifetime(t *testing.T) {
 		m.logFeed.append(fmt.Sprintf("INFO line %d", i))
 	}
 	m.logPulse(logPulseMsg{m.generation, m.logToken, m.logFeed})
-	if len(m.logColours) > logBufferLines || len(m.logLines) > logBufferLines || m.logDropped != 20 {
+	if len(m.logColours) > logBufferLines || len(m.logFilter.cache) > logBufferLines || len(m.logLines) > logBufferLines || m.logDropped != 20 {
 		t.Fatal("highlight cache outlived retained lines")
 	}
 	if _, found := m.logColours["INFO line 0"]; found {
 		t.Fatal("discarded line remained in the highlight cache")
 	}
+	if _, found := m.logFilter.cache["INFO line 0"]; found {
+		t.Fatal("discarded line remained in the filter cache")
+	}
 	m.closeLog()
-	if m.logColours != nil {
+	if m.logColours != nil || m.logFilter != nil {
 		t.Fatal("closing logs retained the highlight cache")
 	}
 }

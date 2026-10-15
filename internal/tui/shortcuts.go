@@ -22,6 +22,9 @@ func (m *model) shortcuts(separator string, hints ...shortcut) string {
 }
 
 func (m *model) footerHelp(d dimensions) string {
+	if m.showingLogs() && m.logFilterError != "" {
+		return m.theme.style("error").Render(" "+m.logFilterError) + " · " + m.shortcuts("", shortcut{"Esc", "cancel"})
+	}
 	hints := []shortcut{{"j/k", "move"}, {"[ / ]", "sort column"}, {"O", "next sort"}, {"R", "reverse"}, {"S", "status"}, {":", "command"}, {"?", "help"}, {"q", "quit"}}
 	if d.width > 0 {
 		hints = []shortcut{{"j/k", "move"}, {"Tab", "inspector"}, {"O", "next sort"}, {"R", "reverse"}, {"S", "status"}, {":", "command"}, {"?", "help"}}
@@ -51,7 +54,10 @@ func (m *model) footerHelp(d dimensions) string {
 		}
 	}
 	if m.showingLogs() {
-		hints = []shortcut{{"w", "wrap"}, {"s", "follow"}, {"f", "focus"}, {"Drag", "copy"}, {"Space", "pause"}, {"/", "search"}, {"o", "save"}, {"F", "live/snapshot"}, {"Esc", "close"}}
+		hints = []shortcut{{"/", "filter"}, {"O", "log options"}, {"T", "timestamps"}, {"N", "sources"}, {"w", "wrap"}, {"s", "follow"}, {"f", "focus"}, {"o", "save"}, {"Esc", "close"}}
+		if m.mode == "log-search" {
+			hints = []shortcut{{"Enter", "apply"}, {"Esc", "cancel"}, {"Text / re:regex / !exclude", "filter"}, {"level>=warn / request_id=abc", "fields"}}
+		}
 	}
 	if m.showingEventPanel() {
 		hints = []shortcut{{"1–4", "tabs"}, {"Tab", "cycle"}, {"Space", "pause"}, {"/", "filter"}, {"o", "save"}, {"G", "follow"}, {"Ctrl+R", "reload"}, {"Esc", "close"}}

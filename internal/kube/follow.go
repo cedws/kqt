@@ -10,19 +10,18 @@ import (
 	"sync"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 type LogStreamer interface {
-	StreamLogs(context.Context, string, string, string, *time.Time) (io.ReadCloser, error)
+	StreamLogs(context.Context, string, string, string, *time.Time, ...LogOptions) (io.ReadCloser, error)
 }
 
-func (c *Client) StreamLogs(ctx context.Context, ns, pod, container string, since *time.Time) (io.ReadCloser, error) {
-	tail := int64(200)
-	options := &corev1.PodLogOptions{Container: container, Follow: true, Timestamps: true, TailLines: &tail}
+func (c *Client) StreamLogs(ctx context.Context, ns, pod, container string, since *time.Time, limits ...LogOptions) (io.ReadCloser, error) {
+	options := logRequest(200, limits)
+	options.Container, options.Follow = container, true
 	if since != nil {
 		options.SinceTime = &metav1.Time{Time: *since}
 		options.TailLines = nil
@@ -39,6 +38,10 @@ func (s logSource) prefix() string { return "[" + s.ns + "/" + s.pod + ":" + s.c
 // stream bound to its original UID. Callbacks are serialized. Buffering lives
 // in the caller, which can consume continuously while its viewport is paused.
 func FollowWorkload(ctx context.Context, b Backend, target unstructured.Unstructured, container string, emit func(string), opened ...func()) error {
+	return FollowWorkloadWithOptions(ctx, b, target, container, LogOptions{}, emit, opened...)
+}
+
+func FollowWorkloadWithOptions(ctx context.Context, b Backend, target unstructured.Unstructured, container string, options LogOptions, emit func(string), opened ...func()) error {
 	stream, ok := b.(LogStreamer)
 	if !ok {
 		return fmt.Errorf("this backend does not support live logs")
@@ -181,7 +184,10 @@ func FollowWorkload(ctx context.Context, b Backend, target unstructured.Unstruct
 			active[key] = cancel
 			source := wanted[key]
 			workers.Add(1)
-			go func() { defer workers.Done(); followSource(child, b, stream, source, send, opened...) }()
+			go func() {
+				defer workers.Done()
+				followSource(child, b, stream, source, options, send, opened...)
+			}()
 		}
 		if limited && !limitedBefore {
 			send("[kqt] Live logs limited to 64 containers; narrow the workload or choose a container.")
@@ -207,7 +213,7 @@ func FollowWorkload(ctx context.Context, b Backend, target unstructured.Unstruct
 	}
 }
 
-func followSource(ctx context.Context, b Backend, stream LogStreamer, source logSource, emit func(string), opened ...func()) {
+func followSource(ctx context.Context, b Backend, stream LogStreamer, source logSource, options LogOptions, emit func(string), opened ...func()) {
 	var last *time.Time
 	repeats := 0
 	previousError := ""
@@ -234,7 +240,7 @@ func followSource(ctx context.Context, b Backend, stream LogStreamer, source log
 				continue
 			}
 		}
-		reader, err := stream.StreamLogs(ctx, source.ns, source.pod, source.container, last)
+		reader, err := stream.StreamLogs(ctx, source.ns, source.pod, source.container, last, options)
 		if err == nil {
 			for _, ready := range opened {
 				ready()

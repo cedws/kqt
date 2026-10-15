@@ -33,7 +33,7 @@ type measuredLogs struct {
 	large                  bool
 }
 
-func (b *measuredLogs) Logs(ctx context.Context, ns, pod, container string, previous bool) (string, error) {
+func (b *measuredLogs) Logs(ctx context.Context, ns, pod, container string, previous bool, options ...LogOptions) (string, error) {
 	n := b.active.Add(1)
 	defer b.active.Add(-1)
 	for old := b.maximum.Load(); n > old; old = b.maximum.Load() {
@@ -53,7 +53,7 @@ func (b *measuredLogs) Logs(ctx context.Context, ns, pod, container string, prev
 	if b.large {
 		return strings.Repeat("long line\n", 200000), nil
 	}
-	return b.Demo.Logs(ctx, ns, pod, container, previous)
+	return b.Demo.Logs(ctx, ns, pod, container, previous, options...)
 }
 func TestWorkloadLogsSelectAllPodsAndLimitConcurrency(t *testing.T) {
 	b := &measuredLogs{Demo: NewDemo(), fail: "web-7c9f6d8b5-0004"}

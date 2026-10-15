@@ -115,6 +115,64 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
             assert data['spec']['replicas']==12, 'rollback changed the replica count'
             send(':pods\r'); expect('pods [12]')
             send('H'); expect('Rollout history supports Deployments')
+        elif args.feature=='log-queries':
+            assert not args.kubeconfig, 'log query workflow uses isolated mixed-format demo logs'
+            send('L'); expect('Containers'); send('\r'); expect('live heartbeat')
+            send('F'); expect('snapshot')
+            def filtered_export(query, name):
+                send('/\x01\x0b'+query+'\r')
+                target=root/name
+                send('o'); expect('Save to:'); send('\x01\x0b'+str(target)+'\r')
+                deadline=time.monotonic()+5
+                while not target.exists() and time.monotonic()<deadline: pump()
+                content=target.read_text()
+                assert '\x1b' not in content, 'export retained styling'
+                return content
+            text=filtered_export('level>=warn', 'severity.log')
+            assert 'WARN slow request' in text and 'INFO starting' not in text and 'request completed' not in text
+            text=filtered_export('request_id=demo-123 http.status=200', 'json.log')
+            assert 'request completed' in text and 'WARN' not in text
+            text=filtered_export('re:"GET /" !health', 'regex.log')
+            assert 'GET / 200' in text and '/health' not in text
+            text=filtered_export('REQUEST COMPLETED', 'text.log')
+            assert 'request completed' in text
+            send('f'); send('/\x01\x0bre:[\r'); expect('Invalid filter'); send('\x1b')
+            current=screen(raw,width,height,resize_events)
+            assert 'request completed' in current and 'Context:' not in current
+            send('f'); send('c'); expect('Containers'); send('\r'); expect('request completed')
+            text=filtered_export('level=warn !health', 'preserved.log')
+            send('\x12'); expect('WARN slow request')
+            send('p'); expect('previous'); expect('WARN slow request')
+            send('\x1b')
+        elif args.feature=='log-options':
+            assert not args.kubeconfig, 'log history workflow uses isolated demo logs'
+            send('L'); expect('Containers'); send('\r'); expect('live heartbeat')
+            send('O'); expect('Log options'); send('since 10m\r'); expect('last 10m')
+            send('O'); send('tail 1000\r'); expect('1000 lines/source')
+            send('T'); send('N')
+            target=root/'displayed.log'
+            send('o'); expect('Save to:'); send('\x01\x0b'+str(target)+'\r')
+            deadline=time.monotonic()+5
+            while not target.exists() and time.monotonic()<deadline: pump()
+            content=target.read_text()
+            assert content.startswith('[default/') and not re.search(r'\d{4}-\d\d-\d\dT',content), 'display/export lost timestamp or source preferences'
+            text=config.read_text()
+            assert 'since: 10m' in text and 'tail_lines: 1000' in text and 'timestamps: false' in text and re.search(r'prefixes: [\'"]?on[\'"]?',text), 'log defaults were not saved:\n'+text
+            send('N'); send('f'); send('O'); expect('Log options'); send('tail custom\r'); expect('Lines per container')
+            send('\x01\x0b-2\r'); expect('Invalid value'); send('\x1b')
+            assert 'Context:' not in screen(raw,width,height,resize_events), 'custom option cancellation lost log focus'
+            send('O'); send('since custom\r'); expect('Log window'); send('\x01\x0b1ns\r')
+            expect('live heartbeat')
+            assert 'configuration loaded' not in screen(raw,width,height,resize_events), 'custom time window returned old initial history'
+            send('O'); send('since all\r'); expect('configuration loaded')
+            send('O'); send('tail 100\r')
+            assert 'tail_lines: 100\n' in config.read_text(), 'line preset was not applied in focus mode'
+            send('O'); send('tail default\r')
+            assert 'tail_lines:' not in config.read_text(), 'reset did not restore original per-mode defaults'
+            send('w'); send('s'); send('f'); send('\x1b')
+            send('L'); expect('Containers'); send('\r'); expect('follow off')
+            assert '· wrap' not in screen(raw,width,height,resize_events).splitlines()[4], 'wrapping default was not restored on reopening'
+            send('\x1b')
         elif args.feature=='logs-controls':
             send('L'); expect('Containers'); send('\r'); expect('live heartbeat')
             send('s'); expect('follow off')

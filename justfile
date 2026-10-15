@@ -26,6 +26,8 @@ smoke: build
     python3 scripts/features-smoke.py --feature overview
     python3 scripts/features-smoke.py --feature downloads
     python3 scripts/features-smoke.py --feature logs-controls
+    python3 scripts/features-smoke.py --feature log-queries
+    python3 scripts/features-smoke.py --feature log-options
     python3 scripts/features-smoke.py --feature rollouts
     python3 scripts/features-smoke.py --feature contexts
     python3 scripts/features-smoke.py --feature command-history

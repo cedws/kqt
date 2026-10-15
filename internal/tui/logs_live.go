@@ -83,8 +83,7 @@ func (m *model) followLogs() tea.Cmd {
 	m.logLines = nil
 	m.logSize, m.logDropped = 0, 0
 	m.logPaused = false
-	m.logTail = true
-	m.logSearch = ""
+	m.logTail = m.settings.Config.Logs.Follow
 	m.logDone = false
 	m.mode = "logs"
 	m.resize()
@@ -95,15 +94,16 @@ func (m *model) followLogs() tea.Cmd {
 	m.panel.GotoTop()
 	m.logTitle()
 	feed, b, target, container, g, token := m.logFeed, m.backend, m.logObject, m.logContainer, m.generation, m.logToken
+	options := m.logRequestOptions()
 	go func() {
-		err := kube.FollowWorkload(ctx, b, target, container, feed.append, feed.opened)
+		err := kube.FollowWorkloadWithOptions(ctx, b, target, container, options, feed.append, feed.opened)
 		feed.finish(err)
 	}()
 	m.promoteHistoryExecution("logs", token)
 	return waitLog(ctx, g, token, feed)
 }
 func (m *model) showingLogs() bool {
-	return m.mode == "logs" || m.mode == "log-search" || m.mode == "log-save"
+	return m.mode == "logs" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "log-since" || m.mode == "log-tail"
 }
 func (m *model) logTitle() {
 	m.panelTitle = "Logs · " + m.logObject.GetNamespace() + "/" + m.logObject.GetName() + ":" + m.logContainer
@@ -129,6 +129,16 @@ func (m *model) logTitle() {
 	if m.logWrap {
 		m.panelTitle += " · wrap"
 	}
+	if since := m.settings.Config.Logs.Since; since != "" && since != "all" {
+		m.panelTitle += " · last " + since
+	}
+	if tail := m.settings.Config.Logs.TailLines; tail != nil {
+		if *tail < 0 {
+			m.panelTitle += " · all lines"
+		} else {
+			m.panelTitle += fmt.Sprintf(" · %d lines/source", *tail)
+		}
+	}
 	if m.logSearch != "" {
 		m.panelTitle += " · /" + kube.Safe(m.logSearch)
 	}
@@ -140,20 +150,35 @@ func (m *model) logContent() string {
 // Filtering and export always use plain text; styling happens only for display.
 func (m *model) logContentWith(render func(string) string) string {
 	var lines []string
-	if m.logDropped > 0 {
-		lines = append(lines, fmt.Sprintf("[kqt] %d older lines discarded (4 MiB / 10,000 line buffer)", m.logDropped))
+	source, dropped := m.logLines, m.logDropped
+	if m.logPaused {
+		source, dropped = m.logFrozen, m.logFrozenDropped
 	}
-	query := strings.ToLower(m.logSearch)
-	for _, line := range m.logLines {
-		if query == "" || strings.Contains(strings.ToLower(line), query) {
+	if dropped > 0 {
+		lines = append(lines, fmt.Sprintf("[kqt] %d older lines discarded (4 MiB / 10,000 line buffer)", dropped))
+	}
+	if m.logFilter == nil || m.logFilter.query != m.logSearch {
+		filter, err := compileLogFilter(m.logSearch)
+		if err != nil {
+			return "Invalid log filter: " + kube.Safe(err.Error())
+		}
+		m.logFilter = filter
+	}
+	for _, line := range source {
+		if m.logFilter.matches(line) {
 			if render != nil {
 				line = render(line)
+			} else {
+				line = m.presentLogLine(line)
 			}
 			lines = append(lines, line)
 		}
 	}
 	if len(lines) == 0 {
-		return "No log lines match. Waiting for new output…"
+		if m.logFollow && !m.logPrevious && !m.logDone {
+			return "No log lines match. Waiting for new output…"
+		}
+		return "No log lines match this filter."
 	}
 	return strings.Join(lines, "\n")
 }
@@ -164,12 +189,13 @@ func (m *model) renderLogs() {
 		m.logColours = make(map[string]string)
 	}
 	m.panel.SetContent(m.logContentWith(func(line string) string {
+		shown := m.presentLogLine(line)
 		styled, ok := m.logColours[line]
 		if !ok {
-			styled = m.theme.renderLogLine(line)
+			styled = m.theme.renderLogLine(shown)
 			m.logColours[line] = styled
 		}
-		return styled
+		return m.theme.highlightLogMatches(styled, m.logFilter.spans(shown))
 	}))
 	if m.logTail {
 		m.panel.GotoBottom()
@@ -190,6 +216,9 @@ func (m *model) logPulse(v logPulseMsg) tea.Cmd {
 	for len(m.logLines) > logBufferLines || m.logSize > logBufferBytes {
 		m.logSize -= len(m.logLines[0]) + 1
 		delete(m.logColours, m.logLines[0])
+		if m.logFilter != nil {
+			delete(m.logFilter.cache, m.logLines[0])
+		}
 		m.logLines[0] = ""
 		m.logLines = m.logLines[1:]
 		m.logDropped++
@@ -213,8 +242,12 @@ func (m *model) logPulse(v logPulseMsg) tea.Cmd {
 }
 func (m *model) logsInput(mode string) tea.Cmd {
 	m.input.CharLimit = 256
+	m.logFilterError = ""
 	m.input.Prompt = "/ "
 	value := m.logSearch
+	if mode == "log-search" {
+		m.input.CharLimit = 4096
+	}
 	if mode == "log-save" {
 		var err error
 		value, err = downloadPath(m.settings.Config.DownloadDir, "kqt-logs.log")
@@ -233,6 +266,7 @@ func (m *model) logsInput(mode string) tea.Cmd {
 }
 func (m *model) logsInputKey(msg tea.KeyPressMsg) tea.Cmd {
 	if msg.String() == "esc" {
+		m.logFilterError = ""
 		m.mode = "logs"
 		m.input.Blur()
 		m.input.CharLimit = 256
@@ -241,6 +275,16 @@ func (m *model) logsInputKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	if msg.String() == "enter" {
 		mode, value := m.mode, m.input.Value()
+		if mode == "log-search" {
+			filter, err := compileLogFilter(value)
+			if err != nil {
+				m.logFilterError = kube.Safe(err.Error())
+				m.input.Prompt = "Invalid filter (Esc cancels): "
+				return nil
+			}
+			m.logFilter = filter
+			m.logFilterError = ""
+		}
 		m.mode = "logs"
 		m.input.Blur()
 		m.input.CharLimit = 256

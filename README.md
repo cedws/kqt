@@ -103,6 +103,7 @@ accent colour, with muted descriptions: `j/k: move`, `Tab: inspector`, `Esc: clo
 | `L`, `P` | Live logs / previous log snapshots from a pod, deployment, or statefulset |
 | `w`, `s`, `f` in logs | Toggle line wrapping, follow latest lines, logs-only terminal |
 | `Space`, `/`, `F`, `o` in logs | Pause, search, switch live/snapshot, save displayed logs |
+| `O`, `T`, `N` in logs | Saved log options, toggle timestamps, toggle source prefixes |
 | Mouse drag | Select visible text; release to copy, with a brief “Copied” flash |
 | `S` (also `E`), `:status`, `:events selected` | Readable status, conditions, containers, and live events |
 | `M`, `:metadata` | Resource labels, annotations and finalizers in the same panel |
@@ -209,10 +210,42 @@ Streams reconnect using timestamps to avoid replaying already displayed lines.
 `s` toggles following the newest lines. With following off, collection continues
 and your scroll position stays in place; `s` or `G` returns to the bottom.
 `Space` freezes the display while collection continues in a bounded buffer. `/`
-filters lines by text, ignoring case. `o` saves the displayed, filtered buffer
+opens the filter prompt. Plain text searches for a case-insensitive phrase;
+explicit filter terms can be combined:
+
+| Filter | Matches |
+| --- | --- |
+| `include:timeout !health` | Lines containing `timeout`, excluding `health` |
+| `re:"GET /api/[0-9]+"` | A Go regular expression; add `(?i)` for case-insensitive matching |
+| `level=warn,error` | Either severity in JSON or recognized plain-text level markers |
+| `level>=warn` | Warnings and higher severities |
+| `request_id=abc http.status=500` | Exact JSON field values, including nested object fields |
+| `message="request completed"` | An exact JSON string containing spaces |
+
+Terms combine with AND; `!` excludes a term (`!re:health` excludes a regex).
+`include:` and `exclude:` force literal text. JSON field names and values are
+case-sensitive; severity names ignore case and accept aliases such as `warning`.
+On non-JSON lines, field queries also match literal `key=value` text.
+Positive matches are highlighted in the current theme. Invalid expressions stay
+in the prompt without replacing the active filter. Submit an empty prompt to
+clear it. Filters survive reloads, container changes, and live/snapshot switches;
+opening another resource starts a fresh filter.
+
+`o` saves the displayed, filtered buffer
 to a private file and refuses to overwrite existing files. Logs wrap by default;
 `w` toggles wrapping, and
 `h/l` scrolls unwrapped lines.
+
+`O` opens log options: choose a time window (`1m`, `10m`, `1h`, `24h`, or a custom
+positive duration) and an initial line count per container. Both limits apply
+together. `all` removes the selected limit; `tail default` restores the original
+200-line live / 500-line snapshot defaults. A line count of `0` starts live
+collection without initial history. Changing either limit reloads the logs.
+`T` toggles Kubernetes timestamps and `N` toggles pod/container source prefixes
+without reopening the stream. Application timestamps inside messages stay intact.
+Hidden timestamps and prefixes also stay out of copied and saved text; filtering
+still searches the original collected lines. These options, wrapping, and the
+explicit `s` follow preference are saved under `logs` in the user's config.
 
 `f` toggles a logs-only view that fills the terminal without headers, borders,
 or footers. Drag to copy just the log text; incoming lines wait to display until
@@ -220,9 +253,11 @@ you release the mouse. `f` or `Esc` returns to the framed log view; another
 `Esc` closes logs. Search and save prompts still work in the logs-only view.
 
 `F` switches between live logs and snapshots. Previous logs (`P` / `p`) are
-snapshots. Snapshots read up to 500 lines / 1 MiB per source, at most four sources
-concurrently, and 4 MiB combined. Live collection starts with the last 200 lines
-per source, retains at most 4 MiB / 10,000 lines, and follows at most 64 containers.
+snapshots. By default, snapshots read up to 500 lines / 1 MiB per source, at most
+four sources concurrently, and 4 MiB combined. Live collection starts with the
+last 200 lines per source. Custom time/line limits change this initial history;
+the bounded buffers still apply. Live collection retains at most 4 MiB / 10,000
+lines and follows at most 64 containers.
 Discarded/truncated output and individual source errors are labelled. Closing
 logs, switching contexts, and quitting cancel the streams.
 
@@ -360,6 +395,13 @@ inspector_format: yaml
 refresh_interval: 2s
 editor: "code --wait"
 download_dir: "~/Downloads/kqt"
+logs:
+  since: 10m          # omit for all available history within the line limit
+  tail_lines: 1000    # omit for live 200 / snapshot 500; -1 all; 0 no initial lines
+  timestamps: true
+  prefixes: auto     # auto, "on", "off"
+  wrap: true
+  follow: true
 context_aliases:
   prod: "actual-production-context"
 

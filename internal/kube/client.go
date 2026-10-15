@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -30,7 +29,7 @@ type Query struct {
 type Backend interface {
 	Resources(context.Context) ([]Resource, error)
 	List(context.Context, Query) ([]unstructured.Unstructured, error)
-	Logs(context.Context, string, string, string, bool) (string, error)
+	Logs(context.Context, string, string, string, bool, ...LogOptions) (string, error)
 	Close()
 }
 type ResourceGetter interface {
@@ -199,9 +198,11 @@ func (c *Client) List(ctx context.Context, q Query) ([]unstructured.Unstructured
 	}
 	return result, nil
 }
-func (c *Client) Logs(ctx context.Context, namespace, pod, container string, previous bool) (string, error) {
-	tail, limit := int64(500), int64(1024*1024)
-	stream, err := c.core.Pods(namespace).GetLogs(pod, &corev1.PodLogOptions{Container: container, TailLines: &tail, LimitBytes: &limit, Timestamps: true, Previous: previous}).Stream(ctx)
+func (c *Client) Logs(ctx context.Context, namespace, pod, container string, previous bool, limits ...LogOptions) (string, error) {
+	limit := int64(1024 * 1024)
+	options := logRequest(500, limits)
+	options.Container, options.Previous, options.LimitBytes = container, previous, &limit
+	stream, err := c.core.Pods(namespace).GetLogs(pod, options).Stream(ctx)
 	if err != nil {
 		return "", err
 	}

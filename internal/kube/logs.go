@@ -6,10 +6,34 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
+
+// LogOptions limits the initial history per container. Timestamps are always
+// collected for reliable reconnection; the view can hide them independently.
+type LogOptions struct {
+	SinceTime *time.Time
+	TailLines *int64
+}
+
+func logRequest(defaultTail int64, limits []LogOptions) *corev1.PodLogOptions {
+	options := &corev1.PodLogOptions{Timestamps: true, TailLines: &defaultTail}
+	if len(limits) > 0 {
+		if limits[0].SinceTime != nil {
+			options.SinceTime = &metav1.Time{Time: *limits[0].SinceTime}
+		}
+		if limits[0].TailLines != nil {
+			tail := *limits[0].TailLines
+			options.TailLines = &tail
+		}
+	}
+	return options
+}
 
 // SafeLogLines removes terminal escape sequences as a whole, so container
 // colour codes do not become visible fragments after escaping control bytes.
@@ -19,9 +43,9 @@ func SafeLogLines(s string) string {
 
 // LogSnapshot reads bounded snapshots with four concurrent requests. A workload
 // selector stays in its namespace; errors remain visible alongside healthy pods.
-func LogSnapshot(ctx context.Context, b Backend, target unstructured.Unstructured, container string, previous bool) (string, error) {
+func LogSnapshot(ctx context.Context, b Backend, target unstructured.Unstructured, container string, previous bool, options ...LogOptions) (string, error) {
 	if target.GetKind() == "Pod" && container != "*" {
-		return b.Logs(ctx, target.GetNamespace(), target.GetName(), container, previous)
+		return b.Logs(ctx, target.GetNamespace(), target.GetName(), container, previous, options...)
 	}
 	pods := []unstructured.Unstructured{target}
 	if target.GetKind() != "Pod" {
@@ -66,7 +90,7 @@ func LogSnapshot(ctx context.Context, b Backend, target unstructured.Unstructure
 			for index := range jobs {
 				s := sources[index]
 				prefix := fmt.Sprintf("[%s/%s:%s]", s.ns, s.pod, s.container)
-				data, err := b.Logs(ctx, s.ns, s.pod, s.container, previous)
+				data, err := b.Logs(ctx, s.ns, s.pod, s.container, previous, options...)
 				if err != nil {
 					results[index] = prefix + " Unable to read logs: " + err.Error() + "\n"
 					continue

@@ -25,10 +25,11 @@ type Demo struct {
 	resourceListeners  map[uint64]chan struct{}
 	objects            []unstructured.Unstructured
 	mu                 sync.RWMutex
+	logStart           time.Time
 }
 
 func NewDemo() *Demo {
-	d := &Demo{}
+	d := &Demo{logStart: time.Now().UTC().Truncate(time.Second).Add(-time.Minute)}
 	add := func(version, kind, ns, name string, spec, status map[string]interface{}) {
 		o := unstructured.Unstructured{Object: map[string]interface{}{"apiVersion": version, "kind": kind, "metadata": map[string]interface{}{"name": name, "namespace": ns, "uid": ns + "/" + name}}}
 		o.SetCreationTimestamp(metav1.NewTime(time.Now().Add(-27 * time.Hour)))
@@ -143,7 +144,7 @@ func (d *Demo) List(ctx context.Context, q Query) ([]unstructured.Unstructured, 
 	}
 	return result, nil
 }
-func (d *Demo) Logs(ctx context.Context, ns, pod, container string, previous bool) (string, error) {
+func (d *Demo) Logs(ctx context.Context, ns, pod, container string, previous bool, limits ...LogOptions) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -151,7 +152,20 @@ func (d *Demo) Logs(ctx context.Context, ns, pod, container string, previous boo
 	if previous {
 		suffix = " (previous instance)"
 	}
-	return fmt.Sprintf("2026-10-12T12:00:00Z [%s/%s:%s] INFO starting%s\n2026-10-12T12:00:01Z configuration loaded\n2026-10-12T12:00:02Z listening on :80\n2026-10-12T12:00:05Z GET /health 200\n2026-10-12T12:00:08Z GET / 200\n2026-10-12T12:00:09Z {\"level\":\"info\",\"message\":\"request completed\",\"status\":200,\"duration_ms\":3.4}\n2026-10-12T12:00:10Z WARN slow request path=/api duration_ms=1200", ns, pod, container, suffix), nil
+	options := logRequest(500, limits)
+	messages := []string{fmt.Sprintf("INFO starting%s", suffix), "configuration loaded", "listening on :80", "GET /health 200", "GET / 200", `{"level":"info","message":"request completed","request_id":"demo-123","http":{"status":200},"status":200,"duration_ms":3.4}`, "WARN slow request path=/api duration_ms=1200"}
+	seconds := []int{0, 1, 2, 5, 8, 9, 10}
+	var lines []string
+	for i, message := range messages {
+		stamp := d.logStart.Add(time.Duration(seconds[i]) * time.Second)
+		if options.SinceTime == nil || !stamp.Before(options.SinceTime.Time) {
+			lines = append(lines, stamp.Format(time.RFC3339Nano)+" "+message)
+		}
+	}
+	if options.TailLines != nil && *options.TailLines >= 0 && *options.TailLines < int64(len(lines)) {
+		lines = lines[len(lines)-int(*options.TailLines):]
+	}
+	return strings.Join(lines, "\n"), nil
 }
 func (*Demo) Close() {}
 
@@ -167,7 +181,7 @@ func (d *Demo) Metrics(ctx context.Context, kind, namespace string) (map[string]
 	}
 	return usage, nil
 }
-func (d *Demo) StreamLogs(ctx context.Context, namespace, pod, container string, since *time.Time) (io.ReadCloser, error) {
+func (d *Demo) StreamLogs(ctx context.Context, namespace, pod, container string, since *time.Time, limits ...LogOptions) (io.ReadCloser, error) {
 	reader, writer := io.Pipe()
 	go func() {
 		defer writer.Close()
@@ -181,9 +195,17 @@ func (d *Demo) StreamLogs(ctx context.Context, namespace, pod, container string,
 			}
 		}()
 		if since == nil {
-			text, _ := d.Logs(ctx, namespace, pod, container, false)
-			if _, err := fmt.Fprintln(writer, text); err != nil {
-				return
+			options := logRequest(200, limits)
+			initial := LogOptions{TailLines: options.TailLines}
+			if options.SinceTime != nil {
+				stamp := options.SinceTime.Time
+				initial.SinceTime = &stamp
+			}
+			text, _ := d.Logs(ctx, namespace, pod, container, false, initial)
+			if text != "" {
+				if _, err := fmt.Fprintln(writer, text); err != nil {
+					return
+				}
 			}
 		}
 		timer := time.NewTicker(time.Second)

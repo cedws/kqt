@@ -80,6 +80,9 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 	if m.mode == "log-search" || m.mode == "log-save" {
 		return m.logsInputKey(msg)
 	}
+	if m.mode == "log-since" || m.mode == "log-tail" {
+		return m.logOptionsKey(msg)
+	}
 	if m.mode == "command" || m.mode == "filter" {
 		if m.mode == "command" && k == "ctrl+r" {
 			return m.startHistorySearch()
@@ -205,6 +208,14 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		if m.mode == "logs" {
 			switch k {
+			case "O":
+				return m.openPicker("log-options")
+			case "T":
+				m.toggleLogTimestamps()
+				return nil
+			case "N":
+				m.toggleLogPrefixes()
+				return nil
 			case "/":
 				return m.logsInput("log-search")
 			case "o":
@@ -218,19 +229,27 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 				return m.loadLogs()
 			case "s":
 				m.logTail = !m.logTail
+				m.settings.Config.Logs.Follow = m.logTail
+				m.saveLogPreference("follow", m.logTail)
 				if m.logTail {
 					m.logPaused = false
 				}
 				if !m.logPaused {
+					m.logFrozen = nil
 					m.renderLogs()
 				} else {
 					m.logTitle()
 				}
 				return nil
 			case "space", " ":
+				if !m.logPaused {
+					m.logFrozen = slices.Clone(m.logLines)
+					m.logFrozenDropped = m.logDropped
+				}
 				m.logPaused = !m.logPaused
 				m.logTitle()
 				if !m.logPaused {
+					m.logFrozen = nil
 					m.renderLogs()
 				}
 				return nil
@@ -243,6 +262,8 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 			}
 			if k == "w" {
 				m.logWrap = !m.logWrap
+				m.settings.Config.Logs.Wrap = m.logWrap
+				m.saveLogPreference("wrap", m.logWrap)
 				m.panel.SoftWrap = m.logWrap
 				m.panel.SetYOffset(m.panel.YOffset())
 				m.logTitle()
@@ -551,6 +572,7 @@ func (m *model) openLogs(previous bool) tea.Cmd {
 		return nil
 	}
 	m.logObject = o
+	m.logSearch = ""
 	m.logFullScreen = false
 	m.logPrevious = previous
 	_, m.logFollow = m.backend.(kube.LogStreamer)
@@ -789,7 +811,7 @@ func (m *model) command(value string) tea.Cmd {
 }
 func (m *model) openPicker(kind string) tea.Cmd {
 	m.pickerReturn = ""
-	if kind == "containers" && m.mode == "logs" {
+	if (kind == "containers" || kind == "log-options") && m.mode == "logs" {
 		m.pickerReturn = "logs"
 	}
 	m.previousTheme = m.theme
@@ -798,6 +820,8 @@ func (m *model) openPicker(kind string) tea.Cmd {
 	m.choices = nil
 	m.pickerIndex = 0
 	switch kind {
+	case "log-options":
+		m.choices = m.logOptionChoices()
 	case "rollouts":
 		m.choices = m.rolloutChoices()
 	case "actions":
@@ -952,6 +976,8 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.mode = ""
 		m.input.Blur()
 		switch m.pickerKind {
+		case "log-options":
+			return m.chooseLogOption(c.name)
 		case "actions":
 			return m.actionCommand(c.name, "")
 		case "relations":
@@ -1059,6 +1085,10 @@ Explore
   F / :forwards      Manage forwards; x stops the selected forward
   Logs: w / s / f    Toggle wrapping / follow latest / logs-only terminal
   Logs: c / p / F    Container / previous instance / live or snapshot
+  Logs: O / T / N    Saved time/line options / timestamps / source prefixes
+  Logs: /            Filter text; include:TEXT !TEXT re:REGEX (quote spaces)
+  Log fields         level>=warn, level=warn,error, request_id=abc, http.status=500
+  Log filters        Terms combine; ! excludes; empty input clears the filter
   Drag text          Select and copy readable text; bottom-right confirmation
   e / :edit          Edit fresh resource in configured editor or $EDITOR
 

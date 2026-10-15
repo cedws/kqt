@@ -46,6 +46,7 @@ type config struct {
 	Editor          string                   `toml:"editor,omitempty" yaml:"editor,omitempty"`
 	Shell           string                   `toml:"shell,omitempty" yaml:"shell,omitempty"`
 	DownloadDir     string                   `toml:"download_dir,omitempty" yaml:"download_dir,omitempty"`
+	Logs            logPreferences           `toml:"logs" yaml:"logs"`
 	CommandHistory  []string                 `toml:"command_history,omitempty" yaml:"command_history,omitempty"`
 	ReadOnly        bool                     `toml:"read_only,omitempty" yaml:"read_only,omitempty"`
 	Views           map[string]viewConfig    `toml:"views,omitempty" yaml:"views,omitempty"`
@@ -96,7 +97,7 @@ func DefaultConfigPath() string {
 	return filepath.Join(root, "kqt", "config.yaml")
 }
 func defaultConfig() config {
-	return config{Version: 1, Theme: "catppuccin-mocha", Layout: "inspector", View: "pods", InspectorFormat: "yaml", Refresh: "2s", Views: map[string]viewConfig{}, Layouts: map[string]layoutProfile{}, Contexts: map[string]contextState{}}
+	return config{Version: 1, Theme: "catppuccin-mocha", Layout: "inspector", View: "pods", InspectorFormat: "yaml", Refresh: "2s", Logs: defaultLogPreferences(), Views: map[string]viewConfig{}, Layouts: map[string]layoutProfile{}, Contexts: map[string]contextState{}}
 }
 func decodeConfig(path string, data []byte, c *config) error {
 	if filepath.Ext(path) == ".toml" {
@@ -149,6 +150,9 @@ func LoadSettings(path string) (*Settings, error) {
 		c.Contexts = map[string]contextState{}
 	}
 	c.CommandHistory = boundedCommandHistory(c.CommandHistory)
+	if err = validateLogPreferences(c.Logs); err != nil {
+		return nil, err
+	}
 	if err = validateContextAliases(c.ContextAliases); err != nil {
 		return nil, err
 	}
@@ -299,6 +303,14 @@ refresh_interval: 2s
 # editor: "code --wait" # default: $EDITOR, then $VISUAL, then vi
 # shell: "/bin/sh" # command inside the selected running container
 # download_dir: "~/Downloads/kqt" # default: current directory
+
+logs:
+  # since: 10m # omit for all available history within the line limit
+  # tail_lines: 1000 # omit for live 200 / snapshot 500; -1 all; 0 no initial lines
+  timestamps: true
+  prefixes: auto # auto, "on", "off"
+  wrap: true
+  follow: true
 
 views:
   pods:

@@ -17,7 +17,7 @@ import (
 
 type colouredLogBackend struct{ *kube.Demo }
 
-func (b *colouredLogBackend) StreamLogs(context.Context, string, string, string, *time.Time) (io.ReadCloser, error) {
+func (b *colouredLogBackend) StreamLogs(context.Context, string, string, string, *time.Time, ...kube.LogOptions) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader("2026-10-03T20:59:23Z \x1b[32mINFO\x1b[0m \x1b[2mapp\x1b[0m: ready\n")), nil
 }
 
@@ -95,7 +95,7 @@ func TestLogsFillMainPaneWithoutInspectorShowingThrough(t *testing.T) {
 			m.loadLogs()
 			m.Update(logsMsg{generation: m.generation, token: m.logToken, content: "INFO " + strings.Repeat("界e\u0301 ", 100)})
 			m.inspector.SetContent(strings.Repeat(strings.Repeat("¤", size[0])+"\n", size[1]))
-			for _, mode := range []string{"logs", "log-search", "log-save"} {
+			for _, mode := range []string{"logs", "log-search", "log-save", "log-since", "log-tail"} {
 				m.mode = mode
 				m.resize()
 				view := m.View().Content

@@ -143,11 +143,15 @@ func TestExecRejectsReplacedPodBeforeOpeningStreams(t *testing.T) {
 
 type replayStream struct {
 	*Demo
-	calls int
+	calls   int
+	history LogOptions
 }
 
-func (b *replayStream) StreamLogs(ctx context.Context, ns, pod, container string, since *time.Time) (io.ReadCloser, error) {
+func (b *replayStream) StreamLogs(ctx context.Context, ns, pod, container string, since *time.Time, options ...LogOptions) (io.ReadCloser, error) {
 	b.calls++
+	if b.history.SinceTime != nil && (len(options) != 1 || options[0].SinceTime == nil || !options[0].SinceTime.Equal(*b.history.SinceTime) || options[0].TailLines == nil || *options[0].TailLines != *b.history.TailLines) {
+		return nil, fmt.Errorf("initial history limits changed or were lost")
+	}
 	text := "2026-10-13T10:00:00Z first\n2026-10-13T10:00:00Z second\n"
 	if b.calls > 1 {
 		if since == nil {
@@ -158,13 +162,15 @@ func (b *replayStream) StreamLogs(ctx context.Context, ns, pod, container string
 	return io.NopCloser(strings.NewReader(text)), nil
 }
 func TestLogReconnectPreservesEqualTimestampLinesWithoutReplay(t *testing.T) {
-	backend := &replayStream{Demo: NewDemo()}
+	start := time.Date(2026, 10, 13, 9, 50, 0, 0, time.UTC)
+	tail := int64(1000)
+	backend := &replayStream{Demo: NewDemo(), history: LogOptions{SinceTime: &start, TailLines: &tail}}
 	r, _ := Resolve(Builtins(), "pods")
 	pod, _ := backend.Get(context.Background(), r, "default", "web-7c9f6d8b5-0000")
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 	var lines []string
-	followSource(ctx, backend, backend, logSource{string(pod.GetUID()), pod.GetNamespace(), pod.GetName(), "web"}, func(line string) {
+	followSource(ctx, backend, backend, logSource{string(pod.GetUID()), pod.GetNamespace(), pod.GetName(), "web"}, backend.history, func(line string) {
 		lines = append(lines, line)
 		if strings.Contains(line, "fourth") {
 			cancel()

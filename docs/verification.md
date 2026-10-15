@@ -503,3 +503,29 @@ under their keys. Existing metadata checks cover empty values, multiline content
 Unicode, redaction, exports and terminal sizing with this layout.
 Finalizers use the same two-space indentation and highlighted names in compact
 YAML-style list rows, preserving their API order.
+
+## Log filtering and history controls (2026-10-15)
+
+The log filter accepts literal includes/excludes, Go regular expressions,
+severity lists/thresholds, and exact JSON fields with nested object paths.
+Regression tests cover mixed formats, escaped JSON, precise large numbers,
+quoted values, invalid expressions, bounded caches, and highlighting that keeps
+Unicode graphemes and terminal widths intact. Filters survive log reloads and
+container/live/previous switches; a newly selected resource resets the filter.
+
+`O` opens saved log options with preset/custom time windows and line counts;
+`T`/`N` toggle timestamps and source prefixes without restarting collection.
+HTTP tests verify initial per-container limits, previous snapshots, zero/all
+line counts, cancellation, and reconnect checkpoints that supersede the initial
+window/tail. Demo aggregation checks verify limits reach each source. YAML/TOML
+tests cover partial defaults, private saves, validation, comments, and restoring
+the original live/snapshot line limits. Paused output stays frozen when display
+options change; copies/exports follow the selected presentation.
+
+Full race tests, static checks, and ten Python checks passed. The complete
+three-layout terminal suite, operator workflow, and feature workflows passed,
+including new `log-queries` and `log-options` scenarios for mixed JSON/plain
+filters, plain exports, invalid input in focus mode, custom windows/counts,
+saved defaults, and terminal restoration. Kubernetes request behavior was
+qualified with local HTTP fixtures; these additions were not exercised against
+an external cluster in this run.

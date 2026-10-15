@@ -95,6 +95,9 @@ func (s *Settings) savePatch(patch map[string]any) error {
 	if err = validateContextAliases(check.ContextAliases); err != nil {
 		return err
 	}
+	if err = validateLogPreferences(check.Logs); err != nil {
+		return err
+	}
 	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
@@ -120,6 +123,10 @@ func (s *Settings) savePatch(patch map[string]any) error {
 }
 func mergeMaps(dst, src map[string]any) {
 	for k, v := range src {
+		if v == nil {
+			delete(dst, k)
+			continue
+		}
 		if child, ok := v.(map[string]any); ok {
 			old, ok := dst[k].(map[string]any)
 			if !ok {
@@ -141,6 +148,11 @@ func mergeNodes(dst, src *yaml.Node) {
 				continue
 			}
 			old := dst.Content[j+1]
+			if value.Tag == "!!null" {
+				dst.Content = append(dst.Content[:j], dst.Content[j+2:]...)
+				found = true
+				break
+			}
 			if old.Kind == yaml.MappingNode && value.Kind == yaml.MappingNode && key.Value != "context_aliases" {
 				mergeNodes(old, value)
 			} else {
@@ -152,7 +164,7 @@ func mergeNodes(dst, src *yaml.Node) {
 			found = true
 			break
 		}
-		if !found {
+		if !found && value.Tag != "!!null" {
 			dst.Content = append(dst.Content, key, value)
 		}
 	}

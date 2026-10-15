@@ -181,6 +181,10 @@ type model struct {
 	logColours                               map[string]string
 	logSize, logDropped                      int
 	logSearch                                string
+	logFilter                                *logFilter
+	logFilterError                           string
+	logFrozen                                []string
+	logFrozenDropped                         int
 	pickerReturn                             string
 	metricsEnabled                           bool
 	usage                                    map[string]kube.Usage
@@ -211,7 +215,7 @@ func newModel(ctx context.Context, s *Settings, o Options, l *kube.Loader) (*mod
 	}
 	m := &model{ctx: ctx, settings: s, options: o, loader: l, resources: kube.Builtins(), theme: s.Themes[s.Config.Theme], layout: s.Config.Layout, width: 80, height: 24, sortColumn: "name"}
 	m.inspectorFormat = s.Config.InspectorFormat
-	m.logWrap = true
+	m.logWrap = s.Config.Logs.Wrap
 	m.themeUntil, m.themeTimer = time.Now().Add(10*time.Second), 1
 	m.panel = viewport.New(viewport.WithWidth(74), viewport.WithHeight(16))
 	m.panel.SoftWrap = false
@@ -641,6 +645,9 @@ func (m *model) closeLog() {
 	}
 	m.logFeed = nil
 	m.logColours = nil
+	m.logFrozen = nil
+	m.logFilter = nil
+	m.logFilterError = ""
 }
 func (m *model) loadLogs() tea.Cmd {
 	if m.logFollow && !m.logPrevious {
@@ -648,6 +655,7 @@ func (m *model) loadLogs() tea.Cmd {
 	}
 	m.closeLog()
 	g, token, b, o, c, previous := m.generation, m.logToken, m.backend, m.logObject, m.logContainer, m.logPrevious
+	options := m.logRequestOptions()
 	ctx, cancel := context.WithTimeout(m.session.ctx, 30*time.Second)
 	m.logCancel = cancel
 	m.mode = "logs"
@@ -656,7 +664,8 @@ func (m *model) loadLogs() tea.Cmd {
 	m.panel.SetXOffset(0)
 	m.panel.SoftWrap = m.logWrap
 	m.logPaused = false
-	m.logSearch = ""
+	m.logLines = nil
+	m.logSize, m.logDropped = 0, 0
 	m.logDone = true
 	m.logTitle()
 	m.panel.SetContent("Loading logs…")
@@ -664,7 +673,7 @@ func (m *model) loadLogs() tea.Cmd {
 	m.promoteHistoryExecution("logs", token)
 	return func() tea.Msg {
 		defer cancel()
-		content, err := kube.LogSnapshot(ctx, b, o, c, previous)
+		content, err := kube.LogSnapshot(ctx, b, o, c, previous, options)
 		return logsMsg{g, token, content, err}
 	}
 }
@@ -778,7 +787,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case secretReadyMsg:
 		m.secretReady(v)
 	case logsMsg:
-		if v.generation != m.generation || v.token != m.logToken || m.mode != "logs" {
+		if v.generation != m.generation || v.token != m.logToken || !(m.showingLogs() || m.mode == "picker" && m.pickerReturn == "logs") {
 			return m, nil
 		}
 		if v.err != nil {
@@ -870,7 +879,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.copyFlash = ""
 		}
 	default:
-		if m.mode == "command" || m.mode == "history-search" || m.mode == "filter" || m.mode == "picker" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" || m.mode == "action-confirm" {
+		if m.mode == "command" || m.mode == "history-search" || m.mode == "filter" || m.mode == "picker" || m.showingLogs() && m.mode != "logs" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" || m.mode == "action-confirm" {
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
 			return m, cmd
