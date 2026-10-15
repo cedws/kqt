@@ -379,3 +379,127 @@ checked. All new palettes meet 4.5:1 for those text/background pairs.
 The full race/static/Python suite, three-layout and restart terminal checks,
 operator checks (including metadata tabs, reload and export), and all six
 existing feature terminal workflows passed before the release commit.
+
+## Configurable download directory
+
+Checks cover YAML/TOML persistence, comment preservation, invalid settings,
+home expansion, relative destinations, absolute overrides, new directory/file
+permissions, overwrite protection, cancellation and captured save destinations.
+All manifest, log, event, status and metadata prompts share the same path rules.
+Long paths retain their filenames during terminal resizes at 40, 80 and 120
+columns. Setting the directory or cancelling a prompt creates no export folders.
+
+The race/static/Python suite and existing operator terminal workflow passed.
+The downloads terminal workflow passed setting and clearing a directory with
+spaces, every export type, unchanged default prompts, direct relative exports,
+absolute overrides, collision protection, and resizing a save prompt. It runs
+in CI and `just smoke` with a temporary config and isolated export directory.
+
+## Log focus, following and mouse copy
+
+`w` toggles wrapping and retains the choice through log reloads. `s` toggles
+following the newest lines while collection continues. `f` switches to a
+borderless logs-only terminal; Escape leaves focus before closing logs. The
+live/snapshot switch is now uppercase `F`. Search and save prompts work in focus.
+
+Dragging readable pane text highlights it and sends an OSC52 clipboard request
+on release, with a 1.2-second bottom-right confirmation. Copy strips styling and
+padding, preserves original hard line breaks across soft wraps, and handles
+wide glyphs, combining characters and emoji. Log arrivals keep collecting in the
+bounded buffer while a held drag freezes rendering. Single clicks still select
+rows, focus panes and sort columns. Changed views and hidden Secret values cannot
+be copied from a stale selection.
+
+The full race/static/Python checks and existing three-layout, saved-state restart,
+operator and feature PTY suite passed. Focused tests cover 40x12, 80x24 and
+180x48, scrolling, loading/errors, pause, container-picker cancellation,
+readable modal and inspector geometry,
+Secret redaction and flash expiry. The new logs-controls PTY workflow checks real
+mouse gestures, exact OSC52 payloads, live arrivals during selection, focus
+resizing, search/save, and terminal restoration. CI and `just smoke` run it.
+The screen recorder now handles erase-display commands used when leaving the
+framed view. Clipboard acceptance depends on the terminal's OSC52 support; the
+PTY tests verify requests without changing the user's system clipboard.
+
+## Deployment rollout history and context aliases
+
+`H` / `:rollouts` lists retained Deployment revisions newest first, including
+images and change causes. Revision details show highlighted pod templates and
+field comparisons against the Deployment snapshot taken at history load. `r`
+or `:rollback REVISION` uses the existing exact-resource confirmation flow.
+Rollback restores the template without overwriting replica count or strategy.
+Read-only mode permits browsing and comparison while blocking rollback.
+
+Tests cover revision ownership/namespace filtering, numeric ordering, missing
+revisions, permission errors, replacement identities, template changes, paused
+Deployments and exact template restoration with removed fields. An HTTP test
+checks the real client-go request path, merge-patch type, UID/resourceVersion
+preconditions and preservation of replicas. The isolated demo PTY workflow
+exercises revision browsing, comparison, cancellation, wrong confirmation text,
+confirmed rollback and export of the restored manifest. This does not claim
+live-cluster controller reconciliation qualification.
+
+Context aliases are stored in `context_aliases` and resolve to canonical
+kubeconfig context names. The header shows the short alias; the picker includes
+the real name, and saved route state remains attached to the canonical name.
+`:alias NAME [CONTEXT]`, `:alias`, `:unalias NAME`, `:ctx ALIAS` and
+`--context ALIAS` are supported without modifying kubeconfig. Tests cover
+YAML/TOML persistence and removal, CLI resolution, completion, collisions,
+missing targets, picker selection and canonical saved state. The contexts PTY
+workflow checks saving, listing, completing, switching and removing an alias.
+
+## Successful command history and reverse search
+
+The last 50 successful commands are retained in submission order. Invalid names
+and arguments, failed API/file requests and cancelled actions are excluded.
+Asynchronous results are associated with their original context and operation
+token, so superseded callbacks cannot add old commands to history. Actions enter
+history only after successful completion; log commands use a stream-open signal,
+which also handles successful idle streams with no output. Native Bubble Tea
+editor, shell and clipboard control messages retain their normal lifecycle.
+
+In the command prompt, `Ctrl+R` starts incremental case-insensitive history
+search. Repeated `Ctrl+R` / Up finds older matches; `Ctrl+S` / Down finds newer
+ones. Enter executes, Tab accepts for editing, and Escape / Ctrl+G restores the
+original draft and cursor. Ctrl+R retains refresh behavior outside this prompt.
+Tests cover failed/cancelled/superseded results, delayed export ordering,
+persistence, bounds, reverse search, exhaustion, Unicode, backspace, empty
+history, cancellation and terminal resizing. The command-history PTY workflow
+checks actual control-key input, matching/accepting/running, missing matches,
+draft restoration and failure exclusion in the saved config.
+
+The full race/static/Python checks and existing three-layout, restart, operator
+and feature terminal suite passed. The new workflows run in CI and `just smoke`.
+
+## Shortcut hint colours
+
+Shortcut keys use the active theme's accent colour and bold text; the colon and
+description use the existing muted colour. This applies to footers, picker
+hints, panel headings, inspector hints, resource tabs, history search and the
+shell disconnect hint. The active resource tab remains bold and underlined.
+Resource names and command-history text remain literal, sanitized text.
+
+The `?` / `:help` view uses the same colours and colon separators for its
+shortcut column, preserving description alignment. Its colours follow theme
+changes without resetting the scroll position. The terminal suite checks both
+entry points with Nord key and description colours.
+
+Checks cover all 27 themes and 40-, 80- and 180-column views, including modal
+composition after colour resets. Full race/static/Python checks passed. Terminal
+tests check the actual foreground colours on shortcut keys and descriptions,
+with the existing three-layout navigation/restart checks, operator workflow,
+log controls, rollout history and reverse command search.
+
+In the status panel's Annotations tab, valid
+`kubectl.kubernetes.io/last-applied-configuration` JSON is indented and highlighted.
+Formatting preserves key order and exact number literals without changing the
+source object. Invalid JSON falls back to sanitized plain text, and Secret
+redaction runs before formatting. Regression checks cover nested objects and
+arrays, large numbers, malformed values, redaction and plain metadata exports.
+
+Labels and annotations use compact, sorted `key: value` rows without blank lines
+between entries. Multiline values and formatted last-applied JSON stay indented
+under their keys. Existing metadata checks cover empty values, multiline content,
+Unicode, redaction, exports and terminal sizing with this layout.
+Finalizers use the same two-space indentation and highlighted names in compact
+YAML-style list rows, preserving their API order.

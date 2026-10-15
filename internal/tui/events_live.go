@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -351,7 +350,7 @@ func (m *model) eventsKey(k string) tea.Cmd {
 }
 func (m *model) eventsInput(mode string) tea.Cmd {
 	m.notice = ""
-	m.mode = mode
+	m.input.CharLimit = 256
 	m.input.Prompt = "/ "
 	value := m.eventSearch
 	if mode == "event-save" {
@@ -360,21 +359,32 @@ func (m *model) eventsInput(mode string) tea.Cmd {
 		if !m.eventGlobal && m.resourcePanelTab != resourceStatusTab {
 			value = "kqt-" + strings.ToLower(m.resourcePanelTab.title()) + ".txt"
 		}
+		var err error
+		value, err = downloadPath(m.settings.Config.DownloadDir, value)
+		if err != nil {
+			m.notice = "Unable to prepare download: " + kube.Safe(err.Error())
+			return nil
+		}
+		m.input.CharLimit = 4096
 	}
+	m.mode = mode
 	m.input.SetValue(value)
 	m.input.CursorEnd()
+	m.resize()
 	return m.input.Focus()
 }
 func (m *model) eventsInputKey(msg tea.KeyPressMsg) tea.Cmd {
 	if msg.String() == "esc" {
 		m.mode = m.eventReturnMode()
 		m.input.Blur()
+		m.input.CharLimit = 256
 		return nil
 	}
 	if msg.String() == "enter" {
 		mode, value := m.mode, m.input.Value()
 		m.mode = m.eventReturnMode()
 		m.input.Blur()
+		m.input.CharLimit = 256
 		if mode == "event-search" {
 			m.eventSearch = value
 			m.renderEventPanel()
@@ -382,15 +392,10 @@ func (m *model) eventsInputKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		content := m.eventExport()
 		g, token := m.generation, m.eventToken
+		directory := m.settings.Config.DownloadDir
 		return func() tea.Msg {
-			file, err := os.OpenFile(value, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-			if err == nil {
-				_, err = file.WriteString(content)
-				if closeErr := file.Close(); err == nil {
-					err = closeErr
-				}
-			}
-			return eventSavedMsg{g, token, value, err}
+			path, err := saveDownload(directory, value, content)
+			return eventSavedMsg{g, token, path, err}
 		}
 	}
 	var cmd tea.Cmd

@@ -25,14 +25,14 @@ parser.add_argument('--kubeconfig', type=Path, help='Test a disposable live fixt
 args = parser.parse_args()
 binary = str(args.binary.resolve())
 
-def has_yaml_key_colour(data):
+def has_text_colour(data, text, colour):
     # The terminal renderer may merge the key's colour with the preceding
     # border. Follow SGR state rather than requiring a new escape at the key.
     foreground, end = None, 0
-    def contains_key(chunk):
-        return b'apiVersion' in re.sub(rb'\x1b\[[0-?]*[ -/]*[@-~]', b'', chunk)
+    def contains_text(chunk):
+        return text in re.sub(rb'\x1b\[[0-?]*[ -/]*[@-~]', b'', chunk)
     for match in re.finditer(rb'\x1b\[([0-9;]*)m', data):
-        if foreground == (203, 166, 247) and contains_key(data[end:match.start()]):
+        if foreground == colour and contains_text(data[end:match.start()]):
             return True
         codes = [int(n or 0) for n in match.group(1).split(b';')]
         i = 0
@@ -51,7 +51,7 @@ def has_yaml_key_colour(data):
                     continue
             i += 1
         end = match.end()
-    return foreground == (203, 166, 247) and contains_key(data[end:])
+    return foreground == colour and contains_text(data[end:])
 
 def setup_child():
     signal.pthread_sigmask(signal.SIG_SETMASK, [])
@@ -182,7 +182,7 @@ sys.exit(code)
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline:
                 pump()
-                if has_yaml_key_colour(bytes(raw[start:])):
+                if has_text_colour(bytes(raw[start:]), b'apiVersion', (203, 166, 247)):
                     return
             raise AssertionError('YAML key did not use Catppuccin Mocha syntax colour')
         def check_secret_toggle(marker):
@@ -200,6 +200,9 @@ sys.exit(code)
             expect('kqt-test' if args.kubeconfig else 'web-7c9f6d8b5-0000')
             snapshot('pods')
             assert b'38;2;' in raw or b'38;5;' in raw, 'theme colors absent'
+            expect('j/k: move')
+            assert has_text_colour(bytes(raw), b'j/k', (203, 166, 247)), 'shortcut key did not use theme accent'
+            assert has_text_colour(bytes(raw), b': move', (166, 173, 200)), 'shortcut description did not retain muted colour'
             # SGR mouse press/release: a release must not toggle order again.
             header = screen(raw, width, height).splitlines()[5]
             column_x = header.index('NAME') + 1
@@ -267,7 +270,13 @@ sys.exit(code)
                 send(b'g'); send(b'e'); expect('Updated Pod'); send(b'y'); expect('kqt.dev/editor-tested'); send(b'\x1b'); pump(0.4)
             send(b'J'); expect('JSON'); expect('"apiVersion"'); snapshot('json'); send(b'y'); expect('YAML'); send(b'\x1b'); pump(0.4)
             send(b'tnord'); expect('nord'); send(b'\r'); expect('· nord')
-            send(b'?'); expect('Help'); expect('Navigation'); snapshot('help'); send(b'\x1b'); pump(0.4)
+            for help_command in [b'?', b':help\r']:
+                help_start = len(raw)
+                send(help_command); expect('Help'); expect('Navigation')
+                assert re.search(r'j/k, arrows: +Move through resources', screen(raw, width, height)), 'help shortcut alignment changed'
+                assert has_text_colour(bytes(raw[help_start:]), b'j/k, arrows', (136, 192, 208)), 'help key did not use Nord accent'
+                assert has_text_colour(bytes(raw[help_start:]), b'Move through resources', (216, 222, 233)), 'help description did not use Nord muted colour'
+                snapshot('help'); send(b'\x1b'); pump(0.4)
             send(b':columns name,status,age\r:write smoke-saved\r'); expect('Saved layout smoke-saved')
             send(b':layouts\r'); expect('Layouts'); send(b'smoke-saved\r')
             if not args.kubeconfig:

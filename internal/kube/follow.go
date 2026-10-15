@@ -38,7 +38,7 @@ func (s logSource) prefix() string { return "[" + s.ns + "/" + s.pod + ":" + s.c
 // FollowWorkload reconciles new/removed pods while keeping each container's
 // stream bound to its original UID. Callbacks are serialized. Buffering lives
 // in the caller, which can consume continuously while its viewport is paused.
-func FollowWorkload(ctx context.Context, b Backend, target unstructured.Unstructured, container string, emit func(string)) error {
+func FollowWorkload(ctx context.Context, b Backend, target unstructured.Unstructured, container string, emit func(string), opened ...func()) error {
 	stream, ok := b.(LogStreamer)
 	if !ok {
 		return fmt.Errorf("this backend does not support live logs")
@@ -181,7 +181,7 @@ func FollowWorkload(ctx context.Context, b Backend, target unstructured.Unstruct
 			active[key] = cancel
 			source := wanted[key]
 			workers.Add(1)
-			go func() { defer workers.Done(); followSource(child, b, stream, source, send) }()
+			go func() { defer workers.Done(); followSource(child, b, stream, source, send, opened...) }()
 		}
 		if limited && !limitedBefore {
 			send("[kqt] Live logs limited to 64 containers; narrow the workload or choose a container.")
@@ -207,7 +207,7 @@ func FollowWorkload(ctx context.Context, b Backend, target unstructured.Unstruct
 	}
 }
 
-func followSource(ctx context.Context, b Backend, stream LogStreamer, source logSource, emit func(string)) {
+func followSource(ctx context.Context, b Backend, stream LogStreamer, source logSource, emit func(string), opened ...func()) {
 	var last *time.Time
 	repeats := 0
 	previousError := ""
@@ -236,6 +236,9 @@ func followSource(ctx context.Context, b Backend, stream LogStreamer, source log
 		}
 		reader, err := stream.StreamLogs(ctx, source.ns, source.pod, source.container, last)
 		if err == nil {
+			for _, ready := range opened {
+				ready()
+			}
 			// A reconnect requests the last timestamp inclusively. Skip only the lines
 			// already delivered at that timestamp, preserving distinct equal-time lines.
 			skip, checkpoint := repeats, last

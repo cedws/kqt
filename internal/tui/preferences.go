@@ -89,6 +89,12 @@ func (s *Settings) savePatch(patch map[string]any) error {
 	if _, err = resolveLayouts(check.Layouts); err != nil {
 		return err
 	}
+	if _, err = downloadDirectory(check.DownloadDir); err != nil {
+		return fmt.Errorf("invalid download_dir: %w", err)
+	}
+	if err = validateContextAliases(check.ContextAliases); err != nil {
+		return err
+	}
 	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
@@ -135,7 +141,7 @@ func mergeNodes(dst, src *yaml.Node) {
 				continue
 			}
 			old := dst.Content[j+1]
-			if old.Kind == yaml.MappingNode && value.Kind == yaml.MappingNode {
+			if old.Kind == yaml.MappingNode && value.Kind == yaml.MappingNode && key.Value != "context_aliases" {
 				mergeNodes(old, value)
 			} else {
 				value.HeadComment = old.HeadComment
@@ -153,6 +159,7 @@ func mergeNodes(dst, src *yaml.Node) {
 }
 func (m *model) savePreferences(patch map[string]any) {
 	if err := m.settings.savePatch(patch); err != nil {
+		m.commandConfigError = true
 		m.notice = "Unable to save preferences: " + kube.Safe(err.Error())
 	}
 }

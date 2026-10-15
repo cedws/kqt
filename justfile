@@ -24,6 +24,11 @@ smoke: build
     python3 scripts/features-smoke.py --feature watch
     python3 scripts/features-smoke.py --feature access
     python3 scripts/features-smoke.py --feature overview
+    python3 scripts/features-smoke.py --feature downloads
+    python3 scripts/features-smoke.py --feature logs-controls
+    python3 scripts/features-smoke.py --feature rollouts
+    python3 scripts/features-smoke.py --feature contexts
+    python3 scripts/features-smoke.py --feature command-history
 
 smoke-live: build
     sh scripts/live-smoke.sh

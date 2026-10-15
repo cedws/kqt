@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the v0.1 feature workflows through actual terminal input."""
+"""Exercise feature workflows through actual terminal input."""
 import argparse
 import base64
 import json
@@ -43,6 +43,7 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
     if args.feature=='access': launch += ['--read-only']
     process=subprocess.Popen([sys.executable,'-c',wrapper,*launch],stdin=slave,stdout=slave,stderr=slave,preexec_fn=setup_child,env=dict(os.environ,TERM='xterm-256color',COLORTERM='truecolor'))
     raw=bytearray()
+    resize_events=[(0,width,height)]
     def pump(duration=0.15):
         end=time.monotonic()+duration
         while time.monotonic()<end:
@@ -59,12 +60,150 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
         end=time.monotonic()+timeout
         while time.monotonic()<end:
             pump()
-            current=screen(raw,width,height)
+            current=screen(raw,width,height,resize_events)
             if value in current: return current
         raise AssertionError(value+' not on screen:\n'+current)
     try:
         expect('pods [5]' if args.kubeconfig else 'pods [12]')
-        if args.feature=='relations':
+        if args.feature=='command-history':
+            send(':theme nord\r'); send(':theme dracula\r')
+            for value, error in [('themse','unknown resource'),('theme missing','Unknown theme'),('logs typo','Use :logs'),('pods typo','do not take arguments')]:
+                send(':'+value+'\r'); expect(error)
+            text=config.read_text()
+            assert 'theme nord' in text and 'theme dracula' in text, 'successful commands were not saved'
+            assert 'themse' not in text and 'theme missing' not in text and 'logs typo' not in text and 'pods typo' not in text, 'failed command entered history'
+            send(':draft\x12theme'); expect('(reverse-i-search)'); expect('Match: :theme dracula')
+            send('\x12'); expect('Match: :theme nord')
+            send('\x13'); expect('Match: :theme dracula')
+            send('\t'); expect(':theme dracula'); send('\x1b')
+            send(':draft\x12does-not-match\r'); expect('No matching command')
+            send('\x1b'); expect(':draft'); send('\x1b')
+            send(':\x12nord\r'); expect('· nord')
+            send(':deploy\r'); expect('deployments.apps [1]')
+            send(':scale 3\r'); expect('Confirm scale'); send('\x1b')
+            assert 'scale 3' not in config.read_text(), 'cancelled mutation entered history'
+            destination=root/'history-export.json'
+            command=':export json '+json.dumps(str(destination))+'\r'
+            send(command); expect('Manifest saved to'); before=config.read_text()
+            send(command); expect('Unable to save manifest')
+            assert config.read_text()==before, 'failed export changed saved command history'
+        elif args.feature=='contexts':
+            send(':alias prod\r'); expect('Context: prod'); expect('Context alias saved:')
+            assert 'prod: demo' in config.read_text(), 'alias was not saved'
+            send(':ctx pr\t'); expect(':ctx prod'); send('\x1b')
+            send('c'); expect('Contexts'); expect('prod'); expect('demo'); send('\r')
+            expect('Context: prod'); expect('connected')
+            send(':ctx prod\r'); expect('Context: prod'); expect('pods [12]')
+            send(':alias\r'); expect('Context aliases'); expect('prod → demo'); send('\x1b')
+            send(':unalias prod\r'); expect('Context: demo'); expect('Context alias removed:')
+            assert 'prod: demo' not in config.read_text(), 'alias removal did not persist'
+        elif args.feature=='rollouts':
+            assert not args.kubeconfig, 'rollout smoke uses the isolated demo backend'
+            send(':deploy\r'); expect('deployments.apps [1]')
+            send('H'); expect('Rollouts'); expect('revision 2'); expect('current')
+            send('\x12'); expect('Rollouts'); expect('revision 2')
+            send('revision 1\r'); expect('Revision 1'); expect('nginx:1.27')
+            send('d'); expect('/spec/containers/0/image'); expect('nginx:1.28')
+            send('r'); expect('Confirm rollback')
+            send('wrong\r'); expect('Type the exact resource name'); send('\x1b')
+            send(':rollback 1\r'); expect('Confirm rollback')
+            send('default/web\r'); expect('Rollback to revision 1 requested')
+            destination=root/'rolled-back.json'
+            send(':export json '+json.dumps(str(destination))+'\r'); expect('Manifest saved to')
+            data=json.loads(destination.read_text())
+            assert data['spec']['template']['spec']['containers'][0]['image']=='nginx:1.27', 'rollback did not restore the selected image'
+            assert data['spec']['replicas']==12, 'rollback changed the replica count'
+            send(':pods\r'); expect('pods [12]')
+            send('H'); expect('Rollout history supports Deployments')
+        elif args.feature=='logs-controls':
+            send('L'); expect('Containers'); send('\r'); expect('live heartbeat')
+            send('s'); expect('follow off')
+            send('w')
+            title=screen(raw,width,height,resize_events).splitlines()[4]
+            assert '· wrap' not in title, 'w did not disable log wrapping'
+            send('w')
+            assert '· wrap' in screen(raw,width,height,resize_events).splitlines()[4], 'w did not enable wrapping'
+            send('f'); pump(0.2)
+            send('c'); expect('Containers'); send('\x1b'); pump(0.2)
+            current=screen(raw,width,height,resize_events)
+            assert 'Context:' not in current and '╭' not in current and 'Esc: close' not in current, 'focus retained application UI:\n'+current
+            # Real SGR mouse press, drag, release. Arrival during a held drag
+            # must not change the displayed text, even though collection runs.
+            rows=current.splitlines()
+            y=next(i for i,line in enumerate(rows) if 'listening' in line)
+            x=rows[y].index('listening')
+            def mouse(button,x,y,release=False):
+                send(f'\x1b[<{button};{x+1};{y+1}'+('m' if release else 'M'))
+            mouse(0,x,y); mouse(32,x+8,y)
+            frozen=screen(raw,width,height,resize_events)
+            pump(1.3)
+            assert screen(raw,width,height,resize_events)==frozen, 'live arrival moved the held selection'
+            mouse(0,x+8,y,True); expect('Copied')
+            matches=re.findall(rb'\x1b]52;c;([A-Za-z0-9+/=]+)',raw)
+            assert matches and base64.b64decode(matches[-1])==b'listening', 'drag copied UI, formatting or the wrong text'
+            assert screen(raw,width,height,resize_events).splitlines()[-1].endswith(' Copied '), 'copy flash is not bottom-right'
+            pump(1.5)
+            assert 'Copied' not in screen(raw,width,height,resize_events), 'copy flash did not expire'
+            send('/'); expect('/ '); send('listening\r'); expect('listening')
+            send('/\x01\x0b\r'); expect('live heartbeat')
+            for width in [80,120]:
+                resize_events.append((len(raw),width,height))
+                fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',height,width,0,0))
+                os.killpg(process.pid,signal.SIGWINCH); pump(0.2)
+                current=expect('live heartbeat')
+                assert 'Context:' not in current and '│' not in current, 'resize restored chrome in log focus'
+            send('o'); expect('Save to:')
+            target=root/'focused.log'
+            send('\x01\x0b'+str(target)+'\r')
+            deadline=time.monotonic()+5
+            while not target.exists() and time.monotonic()<deadline: pump()
+            assert 'live heartbeat' in target.read_text(), 'focus log export lost collected output'
+            assert 'Save to:' not in screen(raw,width,height,resize_events), 'focus save prompt did not close'
+            send('\x1b'); expect('Context:'); expect('follow off')
+            send('s'); expect('following')
+            send('F'); expect('snapshot'); send('F'); expect('live')
+            send('\x1b')
+        elif args.feature=='downloads':
+            directory=root/'downloads with spaces'
+            send(':download-dir '+json.dumps(str(directory))+'\r'); expect('Download directory:')
+            assert str(directory) in config.read_text(), 'default download directory was not saved'
+            assert not directory.exists(), 'setting the directory created it before an export'
+            send(':export json clean nested/manifest.json\r'); expect('Manifest saved to')
+            data=json.loads((directory/'nested/manifest.json').read_text())
+            assert data['kind']=='Pod'
+            name=data['metadata']['name']
+            assert directory.stat().st_mode & 0o777==0o700, 'download directory is not private'
+            send('y'); expect('YAML'); send('o'); expect(name+'.yaml')
+            for width in [80,120]:
+                resize_events.append((len(raw),width,height))
+                fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',height,width,0,0))
+                os.killpg(process.pid,signal.SIGWINCH); pump(0.2)
+                expect(name+'.yaml')
+            send('\r'); expect('Manifest saved to')
+            assert 'kind: Pod' in (directory/(name+'.yaml')).read_text(), 'default manifest prompt saved to the wrong location'
+            send('\x1b')
+            send('M'); expect('Labels (')
+            for tab, filename, text in [('2','kqt-labels.txt','Labels'),('3','kqt-annotations.txt','Annotations'),('4','kqt-finalizers.txt','Finalizers'),('1','kqt-events.log','Containers')]:
+                send(tab); expect(text); send('o'); expect(filename); send('\r')
+                expect('Events saved to' if tab=='1' else 'Metadata saved to')
+                assert text in (directory/filename).read_text(), 'active resource tab used the wrong directory'
+            send('\x1b')
+            send('L'); expect('Containers'); send('\r'); expect('live heartbeat')
+            send(' '); send('o'); expect('kqt-logs.log'); send('\r'); expect('Logs saved to')
+            assert 'live heartbeat' in (directory/'kqt-logs.log').read_text(), 'logs ignored the download directory'
+            send('\x1b')
+            status=(directory/'kqt-events.log').read_bytes()
+            send(':events\r'); expect('events ['); send('o'); send('\r'); expect('Unable to save events')
+            assert (directory/'kqt-events.log').read_bytes()==status, 'an event export overwrote a status export'
+            send('o'); send('\x01\x0ball-events.log\r'); expect('Events saved to')
+            assert 'BackOff' in (directory/'all-events.log').read_text(), 'global events ignored the default directory'
+            send(':pods\r'); expect('pods [12]')
+            override=root/'absolute.json'; send(':export json '+json.dumps(str(override))+'\r'); expect('Manifest saved to')
+            assert json.loads(override.read_text())['kind']=='Pod', 'absolute export override failed'
+            for path in directory.rglob('*'):
+                if path.is_file(): assert path.stat().st_mode & 0o777==0o600, 'a downloaded file is not private'
+            send(':download-dir clear\r'); expect('Download directory: current directory')
+        elif args.feature=='relations':
             send(':deploy\r'); expect('deployments.apps [1]')
             send('b'); expect('Relations'); expect('owned ReplicaSet')
             send('owned ReplicaSet\r'); expect('replicasets.apps [1]')

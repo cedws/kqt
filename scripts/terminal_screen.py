@@ -67,7 +67,15 @@ def screen(raw, width=80, height=24, resize_events=()):
                     ch = grid[row][max(0,col-1)]
                     for j in range(col,min(width,col+n)): grid[row][j] = ch
                     col = min(width,col+n)
-                elif command == 'J' and nums and nums[0] in [2,3]: grid = [[' ']*width for _ in range(height)]
+                elif command == 'J':
+                    mode = nums[0] if nums else 0
+                    if mode in [2,3]: grid = [[' ']*width for _ in range(height)]
+                    elif mode == 0:
+                        grid[row][col:] = [' ']*max(0,width-col)
+                        for j in range(row+1,height): grid[j] = [' ']*width
+                    elif mode == 1:
+                        for j in range(row): grid[j] = [' ']*width
+                        grid[row][:min(width,col+1)] = [' ']*min(width,col+1)
                 elif command == 'K':
                     mode = nums[0] if nums else 0
                     start, end = (0,width) if mode == 2 else (0,col+1) if mode == 1 else (col,width)

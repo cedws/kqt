@@ -45,11 +45,13 @@ type config struct {
 	Refresh         string                   `toml:"refresh_interval" yaml:"refresh_interval"`
 	Editor          string                   `toml:"editor,omitempty" yaml:"editor,omitempty"`
 	Shell           string                   `toml:"shell,omitempty" yaml:"shell,omitempty"`
+	DownloadDir     string                   `toml:"download_dir,omitempty" yaml:"download_dir,omitempty"`
 	CommandHistory  []string                 `toml:"command_history,omitempty" yaml:"command_history,omitempty"`
 	ReadOnly        bool                     `toml:"read_only,omitempty" yaml:"read_only,omitempty"`
 	Views           map[string]viewConfig    `toml:"views,omitempty" yaml:"views,omitempty"`
 	Layouts         map[string]layoutProfile `toml:"layouts,omitempty" yaml:"layouts,omitempty"`
 	Contexts        map[string]contextState  `toml:"contexts,omitempty" yaml:"contexts,omitempty"`
+	ContextAliases  map[string]string        `toml:"context_aliases,omitempty" yaml:"context_aliases,omitempty"`
 }
 type Settings struct {
 	Path     string
@@ -147,6 +149,9 @@ func LoadSettings(path string) (*Settings, error) {
 		c.Contexts = map[string]contextState{}
 	}
 	c.CommandHistory = boundedCommandHistory(c.CommandHistory)
+	if err = validateContextAliases(c.ContextAliases); err != nil {
+		return nil, err
+	}
 	if c.Version != 1 {
 		return nil, fmt.Errorf("config version must be 1")
 	}
@@ -157,6 +162,9 @@ func LoadSettings(path string) (*Settings, error) {
 		if _, err := editorArgs(c.Shell); err != nil {
 			return nil, fmt.Errorf("invalid shell command: %w", err)
 		}
+	}
+	if _, err := downloadDirectory(c.DownloadDir); err != nil {
+		return nil, fmt.Errorf("invalid download_dir: %w", err)
 	}
 	if c.Namespace != "" && len(validation.IsDNS1123Label(c.Namespace)) > 0 {
 		return nil, fmt.Errorf("invalid saved namespace %q", c.Namespace)
@@ -290,6 +298,7 @@ refresh_interval: 2s
 # read_only: true # disables resource changes and shells
 # editor: "code --wait" # default: $EDITOR, then $VISUAL, then vi
 # shell: "/bin/sh" # command inside the selected running container
+# download_dir: "~/Downloads/kqt" # default: current directory
 
 views:
   pods:

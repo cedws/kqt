@@ -261,7 +261,7 @@ func TestSecretTogglePreservesScrollAndTerminalDimensions(t *testing.T) {
 			}
 			for _, line := range lines {
 				if ansi.StringWidth(line) != size[0] {
-					t.Fatalf("Secret view width differs from %d", size[0])
+					t.Fatalf("Secret view width differs from %d: %d %q", size[0], ansi.StringWidth(line), line)
 				}
 			}
 		}

@@ -14,7 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
-var version = "0.2.0-dev"
+var version = "0.3.0-dev"
 
 func command() *cobra.Command {
 	var o tui.Options

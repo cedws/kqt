@@ -97,7 +97,7 @@ func TestRelationshipsOwnerCyclesAndIngressDuplicateServices(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if len(links) != 13 {
+	if len(links) != 14 {
 		t.Fatalf("owner cycle or duplicate resources: %d", len(links))
 	}
 	cancelled, cancel := context.WithCancel(context.Background())

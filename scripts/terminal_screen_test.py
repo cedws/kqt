@@ -4,6 +4,15 @@ from terminal_screen import screen
 
 
 class ScreenResizeTests(unittest.TestCase):
+    def test_erase_display_from_cursor_clears_old_terminal_chrome(self):
+        raw = b'abcd\r\nefgh\r\nijkl\x1b[2;3H\x1b[JZ'
+        self.assertEqual(screen(raw, 4, 3), 'abcd\nefZ \n    ')
+        self.assertEqual(screen(raw.replace(b'\x1b[J', b'\x1b[0J'), 4, 3), 'abcd\nefZ \n    ')
+
+    def test_erase_display_to_cursor_preserves_position_and_later_rows(self):
+        raw = b'abcd\r\nefgh\r\nijkl\x1b[2;3H\x1b[1JZ'
+        self.assertEqual(screen(raw, 4, 3), '    \n  Zh\nijkl')
+
     def test_resize_preserves_previous_wrapping(self):
         prefix = b'abcdefgh'
         raw = prefix + b'\r\x1b[BZ'

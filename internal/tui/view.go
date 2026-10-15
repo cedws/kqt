@@ -16,17 +16,21 @@ func fit(text string, width int) string {
 	text = ansi.Truncate(text, width, "…")
 	return text + strings.Repeat(" ", max(0, width-ansi.StringWidth(text)))
 }
-func (m *model) frame(title, content string, width, height int, focused bool) string {
+func (m *model) frame(title, content string, width, height int, focused bool, hints ...shortcut) string {
 	width = max(2, width)
 	height = max(2, height)
 	inner := width - 2
-	top := ansi.Truncate("─ "+kube.Safe(title)+" ", inner, "")
-	top += strings.Repeat("─", max(0, inner-ansi.StringWidth(top)))
 	b := m.theme.style("border")
 	if focused {
 		b = m.theme.style("focus").Bold(true)
 	}
-	lines := []string{b.Render("╭" + top + "╮")}
+	top := b.Render("─ " + kube.Safe(title))
+	if len(hints) > 0 {
+		top += m.theme.style("muted").Render(" · ") + m.shortcuts(" · ", hints...)
+	}
+	top = ansi.Truncate(top+" ", inner, "")
+	top += b.Render(strings.Repeat("─", max(0, inner-ansi.StringWidth(top))))
+	lines := []string{b.Render("╭") + top + b.Render("╮")}
 	parts := strings.Split(content, "\n")
 	for i := 0; i < height-2; i++ {
 		line := ""
@@ -57,6 +61,11 @@ func (m *model) inspectorDimensions() dimensions {
 }
 func (m *model) resize() {
 	m.input.SetWidth(max(1, m.width-8))
+	m.resizeHistorySearch()
+	if m.mode == "manifest-save" || m.mode == "log-save" || m.mode == "event-save" {
+		m.input.SetWidth(max(1, m.width-ansi.StringWidth(m.input.Prompt)-2))
+		m.input.SetCursor(m.input.Position()) // Reflow long paths immediately after a resize.
+	}
 	if m.mode == "picker" {
 		m.input.SetWidth(max(1, min(90, m.width-4)-6))
 	}
@@ -66,6 +75,12 @@ func (m *model) resize() {
 	}
 	if m.showingEventPanel() {
 		panelHeight-- // Pinned resource tabs above the scrolling viewport.
+	}
+	if m.showingLogs() && m.logFullScreen {
+		panelWidth, panelHeight = m.width, m.height
+		if m.mode != "logs" {
+			panelHeight--
+		}
 	}
 	m.panel.SetWidth(max(1, panelWidth))
 	m.panel.SetHeight(max(1, panelHeight))
@@ -225,17 +240,20 @@ func (m *model) table(width, height int) string {
 	return m.frame(title, strings.Join(lines, "\n"), width, height, !m.inspectorFocused)
 }
 func (m *model) inspectorView(d dimensions) string {
-	title := "Inspector · " + strings.ToUpper(m.inspectorFormat) + " · Tab focus"
+	title := "Inspector · " + strings.ToUpper(m.inspectorFormat)
+	hints := []shortcut{{"Tab", "focus"}}
 	if m.inspectorFocused {
 		title = fmt.Sprintf("Inspector · focused · %s · %.0f%%", strings.ToUpper(m.inspectorFormat), m.inspector.ScrollPercent()*100)
+		hints = nil
 	}
 	if o, ok := m.current(); ok && o.GetKind() == "Secret" {
 		title = "Inspector · " + m.secretLabel() + " · " + strings.ToUpper(m.inspectorFormat)
+		hints = nil
 		if m.inspectorFocused {
 			title = "Inspector · focused · " + m.secretLabel() + " · " + strings.ToUpper(m.inspectorFormat)
 		}
 	}
-	return m.frame(title, m.inspector.View(), d.width, d.height, m.inspectorFocused)
+	return m.frame(title, m.inspector.View(), d.width, d.height, m.inspectorFocused, hints...)
 }
 func (m *model) pickerView(width, height int) string {
 	var lines []string
@@ -258,23 +276,41 @@ func (m *model) pickerView(width, height int) string {
 	if len(m.matches) == 0 {
 		lines = append(lines, "No matches")
 	}
-	lines = append(lines, "", " Type to search · ↑/↓ Ctrl+J/K move · Enter select · Esc close")
+	hints := []shortcut{{"↑/↓ Ctrl+J/K", "move"}, {"Enter", "select"}, {"Esc", "close"}}
 	if m.pickerKind == "forwards" {
-		lines[len(lines)-1] = " Type to search · ↑/↓ select · x stop · Esc close"
+		hints = []shortcut{{"↑/↓", "select"}, {"x", "stop"}, {"Esc", "close"}}
 	}
+	if m.pickerKind == "rollouts" {
+		hints = []shortcut{{"↑/↓", "select"}, {"Enter", "details"}, {"Ctrl+R", "reload"}, {"Esc", "close"}}
+	}
+	lines = append(lines, "", m.theme.style("muted").Render(" Type to search · ")+m.shortcuts(" · ", hints...))
 	return m.frame(strings.Title(m.pickerKind), strings.Join(lines, "\n"), width, height, true)
 }
-func (m *model) View() tea.View {
+func (m *model) baseView() tea.View {
 	w, h := m.width, m.height
 	var content string
-	if w < 40 || h < 12 {
+	if m.showingLogs() && m.logFullScreen {
+		parts := strings.Split(m.panel.View(), "\n")
+		lines := make([]string, m.panel.Height())
+		for i := range lines {
+			if i < len(parts) {
+				lines[i] = fit(parts[i], w)
+			} else {
+				lines[i] = fit("", w)
+			}
+		}
+		if m.mode != "logs" {
+			lines = append(lines, fit(m.input.View(), w))
+		}
+		content = strings.Join(lines, "\n")
+	} else if w < 40 || h < 12 {
 		content = fit("kqt needs at least 40×12. Resize or press q.", w)
 	} else {
 		ns := m.route.namespace
 		if ns == "" {
 			ns = "all"
 		}
-		ctx := m.contextName
+		ctx := m.contextLabel(m.contextName)
 		if ctx == "" {
 			ctx = "select context"
 		}
@@ -302,7 +338,8 @@ func (m *model) View() tea.View {
 		if time.Now().Before(m.themeUntil) {
 			connectionLine += " · " + m.theme.Name
 		}
-		lines := []string{m.theme.style("accent").Bold(true).Render(fit(brand, w)), m.theme.style("foreground").Render(fit(" Context: "+kube.Safe(ctx)+"  ·  Namespace: "+kube.Safe(ns)+"  ·  Explorer · e edit", w)), m.theme.style("muted").Render(fit(connectionLine, w))}
+		contextLine := " Context: " + kube.Safe(ctx) + "  ·  Namespace: " + kube.Safe(ns) + "  ·  Explorer · " + m.shortcuts("", shortcut{"e", "edit"})
+		lines := []string{m.theme.style("accent").Bold(true).Render(fit(brand, w)), m.theme.style("foreground").Render(fit(contextLine, w)), m.theme.style("muted").Render(fit(connectionLine, w))}
 		breadcrumb := " " + m.route.resource.ID()
 		if m.route.labels != "" {
 			breadcrumb += " · " + kube.Safe(m.route.labels)
@@ -321,15 +358,15 @@ func (m *model) View() tea.View {
 		d := m.inspectorDimensions()
 		body := ""
 		if m.showingLogs() || m.showingEventPanel() {
-			title := m.panelTitle + " · Esc close · hjkl scroll · Ctrl+R reload"
+			hints := []shortcut{{"Esc", "close"}, {"hjkl", "scroll"}, {"Ctrl+R", "reload"}}
 			if m.showingLogs() {
-				title = m.panelTitle + " · Esc close · hjkl scroll · c container · p previous · Ctrl+R reload"
+				hints = []shortcut{{"Esc", "close"}, {"hjkl", "scroll"}, {"c", "container"}, {"p", "previous"}, {"Ctrl+R", "reload"}}
 			}
 			panel := m.panel.View()
 			if m.showingEventPanel() {
 				panel = m.resourcePanelTabs() + "\n" + panel
 			}
-			body = m.frame(title, panel, w, bodyHeight, true)
+			body = m.frame(m.panelTitle, panel, w, bodyHeight, true, hints...)
 			body = lipgloss.NewStyle().Background(m.theme.color("surface")).Foreground(m.theme.color("foreground")).Render(body)
 		} else if d.width > 0 {
 			if d.bottom {
@@ -381,54 +418,14 @@ func (m *model) View() tea.View {
 				status += " · resynced; history may have gaps"
 			}
 		}
-		if m.mode == "command" || m.mode == "filter" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" || m.mode == "action-confirm" {
+		if m.mode == "command" || m.mode == "history-search" || m.mode == "filter" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" || m.mode == "action-confirm" {
 			status = m.input.View()
 			token = "foreground"
 		}
 		lines = append(lines, m.theme.style(token).Render(fit(status, w)))
-		help := " j/k move  [/] column  O next sort  R reverse  S status  : command  ? help  q quit"
-		if d.width > 0 {
-			help = " j/k move  Tab inspector  O next sort  R reverse  S status  : command  ? help"
-		}
-		if m.inspectorFocused {
-			help = " j/k scroll  Ctrl+U/D page  g/G ends  Tab/Esc list  ? help  q quit"
-		}
-		if m.mode == "command" {
-			help = " ↑/↓ history  Tab/Shift+Tab complete  Enter run  Esc cancel"
-		} else if m.mode == "action-confirm" {
-			help = " Type the resource name shown  Enter confirm  Esc cancel"
-		} else if m.mode == "" && len(m.resourceForwards()) > 0 {
-			help = " x stop forwards for resource  F manage forwards  : command  ? help  q quit"
-		}
-		if o, ok := m.current(); ok && o.GetKind() == "Secret" && (m.mode == "" || m.mode == "details") {
-			action := "reveal"
-			if m.secretTarget != "" {
-				action = "hide"
-			}
-			help = " x " + action + " values  y YAML  J JSON  Tab inspector  ? help  Esc close"
-			if m.mode == "details" {
-				help = " x " + action + " values  y YAML  J JSON  hjkl scroll  Esc close"
-			} else if m.inspectorFocused {
-				help = " x " + action + " values  y YAML  J JSON  j/k scroll  Tab/Esc list"
-			}
-		}
-		if m.showingLogs() {
-			help = " Space pause  / search  f live/snapshot  o save  c container  p previous  Esc close"
-		}
-		if m.showingEventPanel() {
-			help = " 1–4 tabs  Tab cycle  Space pause  / filter  o save  G follow  Ctrl+R reload  Esc close"
-			if m.resourcePanelTab != resourceStatusTab {
-				help = " 1–4 tabs  Tab/Shift+Tab cycle  j/k scroll  o save  Ctrl+R reload  Esc close"
-			}
-		} else if m.eventGlobal && m.mode == "" && !m.inspectorFocused {
-			help = " Space pause  / filter  o save  G follow  0 all namespaces  : command  q quit"
-		}
-		if m.mode == "overview" {
-			help = " j/k scroll  G/g ends  Enter explore problems  0 all namespaces  n namespaces  Ctrl+R reload  Esc close"
-		}
-		lines = append(lines, m.theme.style("muted").Render(fit(help, w)))
+		lines = append(lines, m.theme.style("muted").Render(fit(m.footerHelp(d), w)))
 		content = strings.Join(lines, "\n")
-		if m.mode == "picker" || m.mode == "details" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" || m.mode == "relations-loading" || m.mode == "action-confirm" || m.mode == "action-running" || m.mode == "access" || m.mode == "access-loading" || m.mode == "overview" {
+		if m.mode == "picker" || m.mode == "details" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" || m.mode == "relations-loading" || m.mode == "rollouts-loading" || m.mode == "rollout-details" || m.mode == "action-confirm" || m.mode == "action-running" || m.mode == "access" || m.mode == "access-loading" || m.mode == "overview" {
 			mw, mh := w-4, h-4
 			modal := ""
 			if m.mode == "picker" {
@@ -436,14 +433,23 @@ func (m *model) View() tea.View {
 				mh = min(24, mh)
 				modal = m.pickerView(mw, mh)
 			} else {
-				title := kube.Safe(m.panelTitle) + " · Esc close · hjkl scroll"
+				hints := []shortcut{{"Esc", "close"}, {"hjkl", "scroll"}}
 				if m.mode == "action-confirm" {
-					title = kube.Safe(m.panelTitle) + " · Enter confirm · Esc cancel"
+					hints = []shortcut{{"Enter", "confirm"}, {"Esc", "cancel"}}
+				} else if m.mode == "rollout-details" {
+					hints = []shortcut{{"d", "compare"}, {"y", "template"}, {"r", "rollback"}, {"Esc", "close"}, {"hjkl", "scroll"}}
 				}
-				modal = m.frame(title, m.panel.View(), mw, mh, true)
+				modal = m.frame(m.panelTitle, m.panel.View(), mw, mh, true, hints...)
 			}
 			modal = lipgloss.NewStyle().Background(m.theme.color("surface")).Foreground(m.theme.color("foreground")).Render(modal)
 			content = lipgloss.NewCompositor(lipgloss.NewLayer(content), lipgloss.NewLayer(modal).X((w-mw)/2).Y((h-mh)/2).Z(1)).Render()
+			// The compositor trims unstyled trailing spaces after colour resets.
+			// Keep every row aligned with the terminal and mouse coordinates.
+			rows := strings.Split(content, "\n")
+			for i, row := range rows {
+				rows[i] = fit(row, w)
+			}
+			content = strings.Join(rows, "\n")
 		}
 	}
 	v := tea.NewView(content)

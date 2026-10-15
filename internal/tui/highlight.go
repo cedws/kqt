@@ -81,6 +81,9 @@ func (m *model) setTheme(t theme) {
 	if m.showingEventPanel() && !m.eventPaused {
 		m.renderEventPanel()
 	}
+	if m.mode == "help" && m.panelTitle == "Help" {
+		m.panel.SetContent(m.renderHelp())
+	}
 }
 
 var jsonTokens = regexp.MustCompile(`"(?:[^"\\]|\\.)*"|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|true|false|null|[{}\[\]:,]`)

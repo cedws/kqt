@@ -88,6 +88,16 @@ type logsMsg struct {
 }
 
 type model struct {
+	historySearch                            *historySearch
+	historySuccesses                         []historySuccess
+	commandSequence                          uint64
+	commandExecutions                        map[historyOperation]*historyExecution
+	commandConfigError                       bool
+	manifestSaveToken                        uint64
+	rolloutToken                             uint64
+	rolloutCancel                            context.CancelFunc
+	rollouts                                 kube.RolloutHistory
+	rolloutSelected                          int64
 	overviewToken                            uint64
 	overviewContext                          context.Context
 	overviewCancel                           context.CancelFunc
@@ -162,6 +172,10 @@ type model struct {
 	logContainer                             string
 	logPrevious                              bool
 	logFollow, logPaused, logTail, logDone   bool
+	logWrap, logFullScreen                   bool
+	selection                                *textSelection
+	copyFlash                                string
+	copyFlashToken                           uint64
 	logFeed                                  *logFeed
 	logLines                                 []string
 	logColours                               map[string]string
@@ -197,6 +211,7 @@ func newModel(ctx context.Context, s *Settings, o Options, l *kube.Loader) (*mod
 	}
 	m := &model{ctx: ctx, settings: s, options: o, loader: l, resources: kube.Builtins(), theme: s.Themes[s.Config.Theme], layout: s.Config.Layout, width: 80, height: 24, sortColumn: "name"}
 	m.inspectorFormat = s.Config.InspectorFormat
+	m.logWrap = true
 	m.themeUntil, m.themeTimer = time.Now().Add(10*time.Second), 1
 	m.panel = viewport.New(viewport.WithWidth(74), viewport.WithHeight(16))
 	m.panel.SoftWrap = false
@@ -213,6 +228,11 @@ func newModel(ctx context.Context, s *Settings, o Options, l *kube.Loader) (*mod
 			m.contextName = l.Current()
 		}
 		if m.contextName != "" {
+			resolved, err := m.resolveContext(m.contextName)
+			if err != nil {
+				return nil, err
+			}
+			m.contextName = resolved
 			exists := false
 			for _, c := range l.Contexts() {
 				if c.Name == m.contextName {
@@ -262,6 +282,8 @@ func (m *model) Init() tea.Cmd {
 	return tea.Batch(m.connect(m.contextName), m.themeTimeout())
 }
 func (m *model) close() {
+	m.commandExecutions = nil
+	m.cancelRollouts()
 	m.cancelOverview()
 	m.cancelAccess()
 	m.stopResourceWatch()
@@ -409,6 +431,7 @@ func (m *model) poll() tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg { return pollMsg{g, id} })
 }
 func (m *model) navigate(r route, remember bool) tea.Cmd {
+	m.cancelRollouts()
 	m.cancelOverview()
 	m.cancelAccess()
 	m.stopResourceWatch()
@@ -610,6 +633,7 @@ func (m *model) describe(o unstructured.Unstructured) string {
 	return fmt.Sprintf("%s  %s\nNamespace  %s\nStatus     %s\nAge        %s\n\n", kube.Safe(o.GetKind()), kube.Safe(o.GetName()), kube.Safe(o.GetNamespace()), kube.Safe(kube.Status(o)), kube.Age(o)) + m.theme.renderYAML(m.manifest(o, false))
 }
 func (m *model) closeLog() {
+	m.selection = nil
 	m.logToken++
 	if m.logCancel != nil {
 		m.logCancel()
@@ -628,13 +652,16 @@ func (m *model) loadLogs() tea.Cmd {
 	m.logCancel = cancel
 	m.mode = "logs"
 	m.resize()
-	m.panel.SoftWrap = true
+	m.panel.SoftWrap = false
+	m.panel.SetXOffset(0)
+	m.panel.SoftWrap = m.logWrap
 	m.logPaused = false
 	m.logSearch = ""
 	m.logDone = true
 	m.logTitle()
 	m.panel.SetContent("Loading logs…")
 	m.panel.GotoTop()
+	m.promoteHistoryExecution("logs", token)
 	return func() tea.Msg {
 		defer cancel()
 		content, err := kube.LogSnapshot(ctx, b, o, c, previous)
@@ -642,6 +669,8 @@ func (m *model) loadLogs() tea.Cmd {
 	}
 }
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	run := m.historyExecutionFor(msg)
+	defer m.observeCommandResult(run, msg)
 	switch v := msg.(type) {
 	case overviewMsg:
 		return m, m.overviewReady(v)
@@ -667,12 +696,18 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case relationsMsg:
 		return m, m.relationsReady(v)
+	case rolloutsMsg:
+		return m, m.rolloutsReady(v)
 	case relationOpenedMsg:
 		return m, m.relationOpened(v)
 	case tea.WindowSizeMsg:
+		m.cancelSelection()
 		m.width = max(1, v.Width)
 		m.height = max(1, v.Height)
 		m.resize()
+		if m.showingLogs() && m.logTail && !m.logPaused {
+			m.panel.GotoBottom()
+		}
 	case connectedMsg:
 		if v.generation != m.generation {
 			return m, nil
@@ -820,11 +855,22 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		return m, m.key(v)
 	case tea.MouseClickMsg:
+		m.cancelSelection()
 		m.mouseClick(v)
+		m.beginSelection(v)
+	case tea.MouseMotionMsg:
+		m.moveSelection(v)
+	case tea.MouseReleaseMsg:
+		return m, m.finishSelection(v)
 	case tea.MouseWheelMsg:
+		m.cancelSelection()
 		m.mouseWheel(v)
+	case copyFlashMsg:
+		if v.token == m.copyFlashToken {
+			m.copyFlash = ""
+		}
 	default:
-		if m.mode == "command" || m.mode == "filter" || m.mode == "picker" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" || m.mode == "action-confirm" {
+		if m.mode == "command" || m.mode == "history-search" || m.mode == "filter" || m.mode == "picker" || m.mode == "log-search" || m.mode == "log-save" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" || m.mode == "action-confirm" {
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
 			return m, cmd

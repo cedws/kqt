@@ -86,10 +86,17 @@ func (m *model) mouseWheel(v tea.MouseWheelMsg) {
 		steps = 1
 	}
 	if m.showingLogs() || m.showingEventPanel() {
-		if !(paneBounds{0, 4, m.width, m.height - 6}).interior(v.X, v.Y) {
+		bounds := paneBounds{0, 4, m.width, m.height - 6}
+		if m.showingLogs() && m.logFullScreen {
+			bounds = paneBounds{-1, -1, m.width + 2, m.panel.Height() + 2}
+		}
+		if !bounds.interior(v.X, v.Y) {
 			return
 		}
 		m.logTail, m.eventTail = false, false
+		if m.showingLogs() {
+			m.logTitle()
+		}
 		for range steps {
 			scroll(&m.panel, key)
 		}
@@ -97,7 +104,7 @@ func (m *model) mouseWheel(v tea.MouseWheelMsg) {
 	}
 	if m.mode != "" {
 		switch m.mode {
-		case "details", "help", "forward-details", "edit-error", "operation-error", "overview", "access":
+		case "details", "help", "forward-details", "edit-error", "operation-error", "overview", "access", "rollout-details":
 			if !(paneBounds{2, 2, m.width - 4, m.height - 4}).interior(v.X, v.Y) {
 				return
 			}

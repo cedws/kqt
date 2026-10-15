@@ -111,6 +111,7 @@ type shellCommand struct {
 	executor           kube.PodExecutor
 	target             unstructured.Unstructured
 	container, heading string
+	disconnectHint     string
 	command            []string
 	in                 io.Reader
 	out, errOut        io.Writer
@@ -132,7 +133,7 @@ func (c *shellCommand) Run() error {
 	}
 	defer reader.Close()
 	defer reader.Cancel()
-	fmt.Fprintln(c.out, c.heading+" · Ctrl+] disconnect")
+	fmt.Fprintln(c.out, c.heading+" · "+c.disconnectHint)
 	state, err := term.MakeRaw(file.Fd())
 	if err != nil {
 		return err
@@ -257,7 +258,9 @@ func (m *model) runShell() tea.Cmd {
 	m.shellCancel = cancel
 	m.mode = "shell"
 	g, token := m.generation, m.shellToken
+	m.promoteHistoryExecution("shell", token)
 	adapter := &shellCommand{ctx: ctx, executor: m.backend.(kube.PodExecutor), target: m.shellObject, container: m.shellContainer, command: args, heading: "kqt shell · " + kube.Safe(m.contextName) + " · " + kube.Safe(m.shellObject.GetNamespace()+"/"+m.shellObject.GetName()+":"+m.shellContainer)}
+	adapter.disconnectHint = m.shortcuts("", shortcut{"Ctrl+]", "disconnect"})
 	return tea.Exec(adapter, func(err error) tea.Msg { return shellClosedMsg{g, token, err} })
 }
 func (m *model) shellClosed(v shellClosedMsg) tea.Cmd {

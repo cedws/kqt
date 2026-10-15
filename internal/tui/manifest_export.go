@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -11,6 +10,7 @@ import (
 
 type manifestSavedMsg struct {
 	generation uint64
+	token      uint64
 	path       string
 	err        error
 }
@@ -49,23 +49,14 @@ func (m *model) copyManifest(format string, clean bool) tea.Cmd {
 	m.notice = strings.ToUpper(format) + " sent to terminal clipboard (OSC52)"
 	return tea.SetClipboard(content)
 }
-func writeManifest(path, content string) error {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-	if err != nil {
-		return err
-	}
-	_, err = file.WriteString(content)
-	if closeErr := file.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		os.Remove(path)
-	}
-	return err
-}
 func (m *model) saveManifest(path, content string) tea.Cmd {
-	g := m.generation
-	return func() tea.Msg { return manifestSavedMsg{g, path, writeManifest(path, content)} }
+	m.manifestSaveToken++
+	token := m.manifestSaveToken
+	g, directory := m.generation, m.settings.Config.DownloadDir
+	return func() tea.Msg {
+		path, err := saveDownload(directory, path, content)
+		return manifestSavedMsg{generation: g, token: token, path: path, err: err}
+	}
 }
 func (m *model) promptManifestExport() tea.Cmd {
 	o, ok := m.current()
@@ -78,12 +69,19 @@ func (m *model) promptManifestExport() tea.Cmd {
 		m.notice = kube.Safe(err.Error())
 		return nil
 	}
+	path, err := downloadPath(m.settings.Config.DownloadDir, o.GetName()+"."+format)
+	if err != nil {
+		m.notice = "Unable to prepare download: " + kube.Safe(err.Error())
+		return nil
+	}
 	m.manifestContent = content
 	m.manifestReturn = m.mode
 	m.mode = "manifest-save"
 	m.input.Prompt = "Save manifest to: "
-	m.input.SetValue(o.GetName() + "." + format)
+	m.input.CharLimit = 4096
+	m.input.SetValue(path)
 	m.input.CursorEnd()
+	m.resize()
 	return m.input.Focus()
 }
 func (m *model) manifestInputKey(v tea.KeyPressMsg) tea.Cmd {
@@ -91,6 +89,7 @@ func (m *model) manifestInputKey(v tea.KeyPressMsg) tea.Cmd {
 		m.mode = m.manifestReturn
 		m.manifestContent = ""
 		m.input.Blur()
+		m.input.CharLimit = 256
 		return nil
 	}
 	if v.String() == "enter" {
@@ -98,6 +97,7 @@ func (m *model) manifestInputKey(v tea.KeyPressMsg) tea.Cmd {
 		m.mode = m.manifestReturn
 		m.manifestContent = ""
 		m.input.Blur()
+		m.input.CharLimit = 256
 		return m.saveManifest(path, content)
 	}
 	var cmd tea.Cmd

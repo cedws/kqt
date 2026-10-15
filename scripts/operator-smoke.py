@@ -106,9 +106,10 @@ def run(root, bad_shell=False):
         else:
             send(b'S'); expect('Status & Events'); expect('Containers')
             expect('live')
-            send(b'2'); expect('Labels ('); expect('[2 Labels]')
-            send(b'\t'); expect('Annotations ('); expect('[3 Annotations]')
-            send(b'\t'); expect('Finalizers ('); expect('[4 Finalizers]')
+            send(b'2'); expect('Labels ('); expect('[2: Labels]')
+            if not args.kubeconfig: expect('app: web')
+            send(b'\t'); expect('Annotations ('); expect('[3: Annotations]')
+            send(b'\t'); expect('Finalizers ('); expect('[4: Finalizers]')
             send(b'\x1b[Z'); expect('Annotations (')
             destination = root / 'metadata.txt'
             send(b'o'); send(b'\x01\x0b' + str(destination).encode() + b'\r')
@@ -155,7 +156,7 @@ def run(root, bad_shell=False):
             assert marker in destination.read_text(), 'log export lost displayed lines'
             assert destination.stat().st_mode & 0o777 == 0o600, 'export is not private'
             send(b'o'); send(b'\x01\x0b' + str(destination).encode() + b'\r'); expect('Unable to save logs')
-            send(b'f'); expect('snapshot'); send(b'f'); expect('live'); send(b'\x1b')
+            send(b'F'); expect('snapshot'); send(b'F'); expect('live'); send(b'\x1b')
             if args.kubeconfig:
                 send(b's'); expect('kqt shell')
                 send(b'printf "kqt-shell-%s\\n" marker; stty size\r'); expect('kqt-shell-marker'); expect('24 80')

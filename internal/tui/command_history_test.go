@@ -59,7 +59,7 @@ func TestCommandHistoryRecallsWithoutExecutingAndRestoresDraft(t *testing.T) {
 func TestCommandHistoryBoundPersistenceAndCancelledInputs(t *testing.T) {
 	m := demoModel(t)
 	for i := range commandHistoryLimit + 3 {
-		submitCommand(m, fmt.Sprintf("missing%d", i))
+		submitCommand(m, fmt.Sprintf("sort /metadata/labels/history%d asc", i))
 	}
 	submitCommand(m, "   ")
 	m.startInput("command", "cancelled")
@@ -68,8 +68,8 @@ func TestCommandHistoryBoundPersistenceAndCancelledInputs(t *testing.T) {
 	historyKey(m, tea.KeyUp)
 	historyKey(m, tea.KeyEnter)
 	history := m.settings.Config.CommandHistory
-	if len(history) != 50 || history[0] != "missing3" || history[49] != "missing52" {
-		t.Fatalf("history did not retain last 50 submitted commands: %v", history)
+	if len(history) != 50 || history[0] != "sort /metadata/labels/history3 asc" || history[49] != "sort /metadata/labels/history52 asc" {
+		t.Fatalf("history did not retain last 50 successful commands: %v", history)
 	}
 	saved, err := LoadSettings(m.settings.Path)
 	if err != nil || !slices.Equal(saved.Config.CommandHistory, history) {

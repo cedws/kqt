@@ -1,10 +1,11 @@
 # kqt
 
-**A Kubernetes Query Tool** — a keyboard-first Kubernetes browser with
-Maestro's terminal layout, themes, and Go UI libraries.
+**A Kubernetes Query Tool** — a keyboard-first Kubernetes browser with live
+resource tables, manifest inspection, logs, workload actions, and customisable
+layouts and themes.
 
-Inspired by [k9s](https://k9scli.io/), kqt uses Bubble Tea v2, Bubbles v2, Lip Gloss
-v2, and the official Kubernetes client-go. It talks directly to Kubernetes;
+kqt uses Bubble Tea v2, Bubbles v2, Lip Gloss v2, and the official Kubernetes
+client-go. It talks directly to Kubernetes;
 kubectl is not required at runtime.
 
 ![kqt resource explorer with highlighted YAML](docs/screenshots/explorer.png)
@@ -64,14 +65,25 @@ current-context for this session; kqt never rewrites kubeconfig. Exec credential
 plugins and OIDC are supported by client-go. Without a current context, a context
 picker opens. UI preferences never silently select a different Kubernetes context.
 
+Use `:alias prod` to give the current context a short name, or
+`:alias prod "actual-context-name"` to name another configured context.
+`:ctx prod` and `kqt --context prod` resolve the alias. The header uses the short
+name; the context picker also shows the real name. `:alias` lists aliases and
+`:unalias prod` removes one. Aliases live in kqt's config and leave kubeconfig
+unchanged. Saved views and namespaces stay attached to the real context name.
+
 ## Explore
+
+Shortcut bars and the `?` / `:help` view highlight keys in the active theme's
+accent colour, with muted descriptions: `j/k: move`, `Tab: inspector`, `Esc: close`.
 
 | Key | Action |
 | --- | --- |
 | `j/k`, arrows; `g/G`; `Ctrl+U/D` | Move, jump, page |
 | `h/l`, arrows | Scroll wide tables or manifests |
 | `:`; `Tab` / `Shift+Tab` | Command prompt; cycle completions forward / back |
-| `Up` / `Down` in `:` | Recall the last 50 submitted commands |
+| `Up` / `Down` in `:` | Recall the last 50 successful commands |
+| `Ctrl+R` in `:` | Reverse search history; repeat for older matches |
 | `/` | Fuzzy search; `web0003` matches `web-7c9f6d8b5-0003` |
 | `n`, `:ns` | Namespace table; Enter selects one |
 | `:ns apps`, `:ns -A`, `0` | Set namespace / all namespaces |
@@ -83,11 +95,15 @@ picker opens. UI preferences never silently select a different Kubernetes contex
 | `a`, `:actions`; `D`, `:delete` | Confirm a workload action or resource deletion |
 | `A`, `:permissions`, `:can-i` | Inspect current identity and permissions |
 | `U`, `:overview` | Cluster health, capacity, usage and warnings |
+| `H`, `:rollouts` | Deployment revision history, images and template comparison |
+| `:rollback REVISION` | Confirm restoring a retained Deployment pod template |
 | `d`, `y` / `v`, `J` | Describe, highlighted YAML, highlighted JSON |
 | `Tab`, then `J` / `y` | Focus inspector, then switch it to JSON / YAML |
 | `x` on a Secret | Toggle decoded values in the inspector or details |
 | `L`, `P` | Live logs / previous log snapshots from a pod, deployment, or statefulset |
-| `Space`, `/`, `f`, `o` in logs | Pause, search, switch live/snapshot, save displayed logs |
+| `w`, `s`, `f` in logs | Toggle line wrapping, follow latest lines, logs-only terminal |
+| `Space`, `/`, `F`, `o` in logs | Pause, search, switch live/snapshot, save displayed logs |
+| Mouse drag | Select visible text; release to copy, with a brief “Copied” flash |
 | `S` (also `E`), `:status`, `:events selected` | Readable status, conditions, containers, and live events |
 | `M`, `:metadata` | Resource labels, annotations and finalizers in the same panel |
 | `m`, `:metrics on` / `off` | Toggle pod/node CPU and memory columns |
@@ -113,9 +129,17 @@ Pickers use arrows or `Ctrl+J/K` while you type to search.
 
 In the command prompt, Up recalls older commands and Down recalls newer ones.
 Down past the newest entry restores your unfinished command and cursor position.
-Recalling a command only fills the prompt; Enter executes it. The last 50 nonempty
-submitted commands are saved as `command_history` in your config file and remain
-available after restarting. Cancelled commands and search text are not recorded.
+Recalling a command only fills the prompt; Enter executes it. The last 50
+successful commands are saved as `command_history` in your config file and remain
+available after restarting. Typos, invalid arguments, failed requests, cancelled
+operations and search text are not recorded. Requests enter history after
+success, retaining the order in which you submitted them.
+
+Press `Ctrl+R` in the `:` prompt for incremental, case-insensitive history search.
+Type part of a command; `Ctrl+R` or Up finds an older match, and `Ctrl+S` or Down
+finds a newer one. `Enter` runs the selected command; `Tab` inserts it into the
+prompt for editing. `Esc` or `Ctrl+G` restores your original draft and cursor.
+Outside the command prompt, `Ctrl+R` keeps its refresh behavior.
 
 Examples: `:po`, `:deploy`, `:sts`, `:svc`, `:nodes`, `:pvc`, `:events`, `:crd`,
 `:widgets.example.com`. Discovery uses preferred API versions, including CRDs.
@@ -143,8 +167,10 @@ column picker, including custom columns and enabled metrics. Sorting uses numeri
 values and exact timestamps for age/event time. Explicit sorting takes precedence
 over fuzzy-match ranking. Choosing an order stops live-event following until `G`
 resumes it. Mouse clicks select rows or focus the inspector; the wheel scrolls the
-pane under the pointer. Terminal text selection usually requires holding Shift
-while using the mouse; the exact modifier depends on your terminal.
+pane under the pointer. Drag across readable text to highlight it, then release
+to copy. A brief **Copied** confirmation appears at the bottom right. This uses
+the terminal's OSC52 clipboard support and preserves original line breaks across
+wrapped rows. Selection stays within the pane where the drag started.
 
 YAML and JSON use the active palette's syntax colours in full-screen panels and
 inspectors. In the table, `J` opens JSON. With the inspector focused, `J` changes
@@ -180,13 +206,20 @@ multiple sources identifies each pod/container. A selected individual pod stays
 bound to its UID; a replacement requires closing logs and selecting it again.
 Streams reconnect using timestamps to avoid replaying already displayed lines.
 
-`Space` pauses the display while collection continues in a bounded buffer. `/`
-filters lines by text, ignoring case; `G` returns to following the bottom after
-scrolling up. `o` saves the displayed, filtered buffer to a private file, refusing
-to overwrite an existing file. Logs wrap by default; `w` toggles wrapping, and
+`s` toggles following the newest lines. With following off, collection continues
+and your scroll position stays in place; `s` or `G` returns to the bottom.
+`Space` freezes the display while collection continues in a bounded buffer. `/`
+filters lines by text, ignoring case. `o` saves the displayed, filtered buffer
+to a private file and refuses to overwrite existing files. Logs wrap by default;
+`w` toggles wrapping, and
 `h/l` scrolls unwrapped lines.
 
-`f` switches between live logs and snapshots. Previous logs (`P` / `p`) are
+`f` toggles a logs-only view that fills the terminal without headers, borders,
+or footers. Drag to copy just the log text; incoming lines wait to display until
+you release the mouse. `f` or `Esc` returns to the framed log view; another
+`Esc` closes logs. Search and save prompts still work in the logs-only view.
+
+`F` switches between live logs and snapshots. Previous logs (`P` / `p`) are
 snapshots. Snapshots read up to 500 lines / 1 MiB per source, at most four sources
 concurrently, and 4 MiB combined. Live collection starts with the last 200 lines
 per source, retains at most 4 MiB / 10,000 lines, and follows at most 64 containers.
@@ -205,7 +238,11 @@ The same panel includes **Labels**, **Annotations**, and **Finalizers** tabs.
 Press `M` (or `:metadata`) on a resource to open Labels directly; use `1` for
 Status, `2` for Labels, `3` for Annotations, and `4` for Finalizers, or cycle with
 `Tab` / `Shift+Tab`. The tab bar stays visible while scrolling. Metadata refreshes
-with the resource; keys are sorted and multiline annotation values remain readable.
+with the resource; sorted labels and annotations show compact `key: value` rows.
+Multiline annotation values remain indented beneath their keys.
+Finalizers appear as a compact list, one highlighted entry per line.
+The last-applied-configuration annotation expands into indented, highlighted JSON
+when valid; its stored value stays unchanged.
 Empty sections say so explicitly. `:metadata annotations` and `:metadata finalizers`
 open those tabs directly. `o` saves the active tab to a private file.
 
@@ -307,11 +344,6 @@ Theme selection, inspector format, and chosen layout are also saved. Launch flag
 override saved values. A theme preview is not saved until Enter; Escape cancels it.
 The theme name appears on the connection line for ten seconds after selection.
 
-To keep settings from an earlier `ket` build, copy its `config.yaml` (or
-`config.toml`) and `themes/` directory into `~/.config/kqt/`, respecting
-`XDG_CONFIG_HOME` if set. Preserve any existing `kqt` configuration. Update
-`KET_THEME` to `KQT_THEME` in your shell configuration.
-
 ```sh
 kqt config                      # Print a YAML example
 kqt config --validate
@@ -327,6 +359,9 @@ namespace: default
 inspector_format: yaml
 refresh_interval: 2s
 editor: "code --wait"
+download_dir: "~/Downloads/kqt"
+context_aliases:
+  prod: "actual-production-context"
 
 views:
   pods:
@@ -359,14 +394,14 @@ JSON Pointer columns such as `/spec/replicas` and
 `/metadata/labels/app.kubernetes.io~1name` are supported. Numeric fields sort
 numerically; age uses creation time.
 
-The original 18 Maestro palettes plus Ayu and Everforest are bundled (27 themes
-in total). Ayu includes `ayu-dark`, `ayu-mirage`, and `ayu-light`. Everforest
+kqt bundles 27 themes, including Ayu and Everforest. Ayu includes `ayu-dark`,
+`ayu-mirage`, and `ayu-light`. Everforest
 includes `everforest-dark-hard`, `everforest-dark-medium`, `everforest-dark-soft`,
 and the matching `everforest-light-*` variants. Use `:themes` to preview them or
 set one directly, for example `:theme ayu-mirage` or
 `:theme everforest-dark-medium`. `kqt themes` lists them. `--theme`
-overrides `KQT_THEME`, which overrides the saved theme. Custom themes retain the
-Maestro TOML format under `themes/NAME.toml` beside the settings file:
+overrides `KQT_THEME`, which overrides the saved theme. Define custom themes in
+TOML files under `themes/NAME.toml` beside the settings file:
 
 ```toml
 version = 1
@@ -376,17 +411,18 @@ extends = "nord"
 accent = "#8be9fd"
 ```
 
-[Palette attribution and upstream notices](internal/tui/THEMES.md) are retained.
+See [palette attribution and upstream notices](internal/tui/THEMES.md) for theme
+licenses.
 Config errors and inheritance cycles fail visibly. Preference writes preserve
 unrelated YAML settings and comments and replace the file atomically. An invalid
 file is not overwritten. Restart to load manual configuration changes.
 
-Existing default `config.toml` settings are loaded if no YAML file exists, then
-carried into `config.yaml` on the first save; the old file stays unchanged.
-Explicit TOML config paths are still supported. No connection credentials are
+If no YAML configuration exists, kqt loads the default `config.toml` and writes
+its settings to `config.yaml` when preferences are saved, preserving the TOML
+file. Explicit TOML config paths are supported. No connection credentials are
 stored in kqt's UI config.
 
-## Verification and remaining scope
+## Development and verification
 
 ```sh
 go test -race ./...
@@ -405,8 +441,6 @@ inheritance, completion, fuzzy matching, syntax highlighting, theme timing,
 inspector focus, terminal dimensions, and log aggregation. PTY checks cover
 editor terminal handoff/restoration and saved-state restart as well.
 
-Resource relationships, workload actions and live resource tables are available.
-See the sections below for their controls and behavior.
 See [the design](docs/design.md), [verification](docs/verification.md), and
 [the pod-shell assessment](docs/pod-shell-assessment.md).
 
@@ -421,6 +455,19 @@ and PVCs/PVs link to their bound storage counterpart. Permission failures or
 missing/replaced references leave available links usable and show a warning.
 
 ## Copying and exporting manifests
+
+Set `download_dir: "~/Downloads/kqt"` in `~/.config/kqt/config.yaml` to choose a
+default directory for all file exports: manifests, logs, events, status, and
+metadata. You can also set it with `:download-dir ~/Downloads/kqt` (quote paths
+containing spaces), inspect it with `:download-dir`, or reset it with
+`:download-dir clear`. The choice is saved across restarts.
+
+Save prompts suggest a path in that directory, and relative paths passed to
+`:export` or entered in a save prompt use it too. Absolute paths and `~/...`
+override the default. Relative directory settings are resolved from the current
+working directory. Without a setting, exports use the current directory.
+Missing parent directories are created on save with mode `0700`; files use
+`0600`, and existing files are never overwritten.
 
 `C` copies the selected manifest using the terminal's OSC52 clipboard support;
 `o` prompts for a private file destination. Both work in YAML/JSON details.
@@ -452,9 +499,29 @@ is reported separately from controller reconciliation; `S` shows rollout status
 and events. Cancelling a request already in progress does not roll back changes;
 refresh to check its final state.
 
+## Deployment rollout history
+
+Select a Deployment and press `H`, or run `:rollouts` (`:rollout history`). The
+picker lists retained revisions, images and change causes, newest first. Enter
+opens the pod template and the ReplicaSet's creation time. `d` compares the
+selected template with the Deployment as it was when history loaded; `y` returns
+to highlighted YAML. `Ctrl+R` reloads, and Escape returns to the revision picker.
+
+Press `r` in revision details, or use `:rollback 1`, to prepare rollback. The
+existing confirmation dialog requires the exact namespace/resource name before
+applying. Rollback restores the selected pod template while preserving the
+current replica count and rollout strategy. It checks Deployment/revision
+identities and template changes again, and uses the latest resource version for
+the patch. Paused Deployments must be resumed before rollback. Read-only mode
+allows history and comparison while disabling rollback.
+
+History comes from ReplicaSets owned by the selected Deployment. Revisions
+removed by Kubernetes' [revision history limit](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#clean-up-policy) are unavailable. This feature
+currently supports Deployments.
+
 ## Live resource tables
 
-Ordinary resource tables now use Kubernetes list/watch streams. Added, modified
+Ordinary resource tables use Kubernetes list/watch streams. Added, modified
 and deleted objects update the table and inspector while preserving selection.
 Expired watch history triggers a full resync; partial lists never replace the
 last complete snapshot, and resources absent from the new list are removed.

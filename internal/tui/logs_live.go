@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 
@@ -22,10 +21,12 @@ type logFeed struct {
 	size, dropped int
 	done          bool
 	err           error
+	ready         bool
 	notify        chan struct{}
 }
 
 func newLogFeed() *logFeed { return &logFeed{notify: make(chan struct{}, 1)} }
+func (f *logFeed) opened() { f.Lock(); f.ready = true; f.Unlock(); f.signal() }
 func (f *logFeed) signal() {
 	select {
 	case f.notify <- struct{}{}:
@@ -87,12 +88,18 @@ func (m *model) followLogs() tea.Cmd {
 	m.logDone = false
 	m.mode = "logs"
 	m.resize()
-	m.panel.SoftWrap = true
+	m.panel.SoftWrap = false
+	m.panel.SetXOffset(0)
+	m.panel.SoftWrap = m.logWrap
 	m.panel.SetContent("Waiting for log lines…")
 	m.panel.GotoTop()
 	m.logTitle()
 	feed, b, target, container, g, token := m.logFeed, m.backend, m.logObject, m.logContainer, m.generation, m.logToken
-	go func() { err := kube.FollowWorkload(ctx, b, target, container, feed.append); feed.finish(err) }()
+	go func() {
+		err := kube.FollowWorkload(ctx, b, target, container, feed.append, feed.opened)
+		feed.finish(err)
+	}()
+	m.promoteHistoryExecution("logs", token)
 	return waitLog(ctx, g, token, feed)
 }
 func (m *model) showingLogs() bool {
@@ -113,6 +120,14 @@ func (m *model) logTitle() {
 	}
 	if m.logPaused {
 		m.panelTitle += " · paused"
+	}
+	if m.logTail {
+		m.panelTitle += " · following"
+	} else {
+		m.panelTitle += " · follow off"
+	}
+	if m.logWrap {
+		m.panelTitle += " · wrap"
 	}
 	if m.logSearch != "" {
 		m.panelTitle += " · /" + kube.Safe(m.logSearch)
@@ -183,9 +198,12 @@ func (m *model) logPulse(v logPulseMsg) tea.Cmd {
 	if err != nil && m.session.ctx.Err() == nil {
 		m.logLines = append(m.logLines, "[kqt] Live logs ended: "+kube.Safe(err.Error()))
 	}
-	if !m.logPaused {
+	if !m.logPaused && !m.selectingLogs() {
 		m.renderLogs()
 	} else {
+		if m.selectingLogs() {
+			m.selection.logPending = true
+		}
 		m.logTitle()
 	}
 	if done {
@@ -194,44 +212,50 @@ func (m *model) logPulse(v logPulseMsg) tea.Cmd {
 	return waitLog(m.session.ctx, v.generation, v.token, v.feed)
 }
 func (m *model) logsInput(mode string) tea.Cmd {
-	m.mode = mode
+	m.input.CharLimit = 256
 	m.input.Prompt = "/ "
 	value := m.logSearch
 	if mode == "log-save" {
-		value = "kqt-logs.log"
+		var err error
+		value, err = downloadPath(m.settings.Config.DownloadDir, "kqt-logs.log")
+		if err != nil {
+			m.notice = "Unable to prepare download: " + kube.Safe(err.Error())
+			return nil
+		}
 		m.input.Prompt = "Save to: "
+		m.input.CharLimit = 4096
 	}
+	m.mode = mode
 	m.input.SetValue(value)
 	m.input.CursorEnd()
+	m.resize()
 	return m.input.Focus()
 }
 func (m *model) logsInputKey(msg tea.KeyPressMsg) tea.Cmd {
 	if msg.String() == "esc" {
 		m.mode = "logs"
 		m.input.Blur()
+		m.input.CharLimit = 256
+		m.resize()
 		return nil
 	}
 	if msg.String() == "enter" {
 		mode, value := m.mode, m.input.Value()
 		m.mode = "logs"
 		m.input.Blur()
+		m.input.CharLimit = 256
+		m.resize()
 		if mode == "log-search" {
 			m.logSearch = value
 			m.renderLogs()
 			return nil
 		}
 		content := m.logContent() + "\n"
+		directory := m.settings.Config.DownloadDir
 		// Save exactly what is displayed, privately, without replacing existing files.
 		return func() tea.Msg {
-			file, err := os.OpenFile(value, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-			if err == nil {
-				_, err = file.WriteString(content)
-				closeErr := file.Close()
-				if err == nil {
-					err = closeErr
-				}
-			}
-			return logSavedMsg{path: value, err: err}
+			path, err := saveDownload(directory, value, content)
+			return logSavedMsg{path: path, err: err}
 		}
 	}
 	var cmd tea.Cmd

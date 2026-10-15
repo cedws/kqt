@@ -17,6 +17,8 @@ type actionResultMsg struct {
 }
 
 func (m *model) cancelAction() {
+	m.forgetHistoryExecution("action")
+	m.input.CharLimit = 256
 	m.actionToken++
 	if m.actionCancel != nil {
 		m.actionCancel()
@@ -28,6 +30,9 @@ func actionIdentity(plan *kube.ActionPlan) string {
 	return strings.TrimPrefix(plan.Object.GetNamespace()+"/"+plan.Object.GetName(), "/")
 }
 func (m *model) actionCommand(action, arg string) tea.Cmd {
+	if action == "rollback" {
+		return m.rolloutCommand(arg, true)
+	}
 	if !m.allowMutation(action) {
 		return nil
 	}
@@ -44,14 +49,19 @@ func (m *model) actionCommand(action, arg string) tea.Cmd {
 		m.notice = kube.Safe(err.Error())
 		return nil
 	}
+	return m.confirmAction(plan)
+}
+func (m *model) confirmAction(plan kube.ActionPlan) tea.Cmd {
 	m.cancelAction()
 	m.actionPlan = &plan
 	m.mode = "action-confirm"
-	m.panelTitle = "Confirm " + action
+	m.resize()
+	m.panelTitle = "Confirm " + plan.Action
 	m.panel.SoftWrap = true
 	m.panel.GotoTop()
 	m.renderActionConfirmation("")
 	m.input.Prompt = "Confirm: "
+	m.input.CharLimit = max(256, len([]rune(actionIdentity(&plan))))
 	m.input.SetValue("")
 	return m.input.Focus()
 }

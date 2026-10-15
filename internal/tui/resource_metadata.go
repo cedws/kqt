@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -41,11 +43,10 @@ func (m *model) resourcePanelTabs() string {
 	}
 	var tabs []string
 	for i, name := range names {
-		style := m.theme.style("muted")
-		if resourcePanelTab(i) == m.resourcePanelTab {
-			style = m.theme.style("accent").Bold(true)
-		}
-		tabs = append(tabs, style.Render(fmt.Sprintf("[%d %s]", i+1, name)))
+		active := resourcePanelTab(i) == m.resourcePanelTab
+		key := m.theme.style("accent").Bold(true).Underline(active)
+		label := m.theme.style("muted").Bold(active).Underline(active)
+		tabs = append(tabs, label.Render("[")+key.Render(fmt.Sprint(i+1))+label.Render(": "+name+"]"))
 	}
 	return strings.Join(tabs, " ")
 }
@@ -68,7 +69,7 @@ func (m *model) renderResourceMetadata(o unstructured.Unstructured, tab resource
 			w.note("No finalizers on this resource.")
 		}
 		for _, finalizer := range finalizers {
-			w.note("• " + finalizer)
+			w.WriteString("  " + m.theme.style("muted").Render("- ") + m.theme.style("focus").Bold(true).Render(kube.Safe(finalizer)) + "\n")
 		}
 		return w.String()
 	}
@@ -86,13 +87,29 @@ func (m *model) renderResourceMetadata(o unstructured.Unstructured, tab resource
 	}
 	slices.Sort(keys)
 	for _, key := range keys {
-		w.WriteString("  " + m.theme.style("focus").Bold(true).Render(kube.Safe(key)) + "\n")
+		label := "  " + m.theme.style("focus").Bold(true).Render(kube.Safe(key)) + m.theme.style("muted").Render(":")
 		value := values[key]
 		if value == "" {
 			value = `""`
 		}
-		w.note(value)
-		w.WriteByte('\n')
+		if tab == resourceAnnotationsTab && key == "kubectl.kubernetes.io/last-applied-configuration" {
+			var pretty bytes.Buffer
+			// Indent the original JSON without decoding numbers or reordering keys.
+			if json.Indent(&pretty, []byte(strings.TrimSpace(value)), "    ", "  ") == nil {
+				if strings.Contains(pretty.String(), "\n") {
+					w.WriteString(label + "\n    " + m.theme.renderJSON(pretty.String()) + "\n")
+				} else {
+					w.WriteString(label + " " + m.theme.renderJSON(pretty.String()) + "\n")
+				}
+				continue
+			}
+		}
+		if strings.Contains(value, "\n") {
+			w.WriteString(label + "\n")
+			w.note(value)
+		} else {
+			w.WriteString(label + " " + kube.SafeLines(value) + "\n")
+		}
 	}
 	if tab == resourceAnnotationsTab && o.GetKind() == "Secret" {
 		w.note("Secret last-applied configuration is hidden, as in the manifest view.")

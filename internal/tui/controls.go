@@ -40,6 +40,7 @@ func scroll(v *viewport.Model, key string) bool {
 	return true
 }
 func (m *model) startInput(mode, value string) tea.Cmd {
+	m.historySearch = nil
 	m.resize()
 	m.mode = mode
 	m.previousFilter = m.filter
@@ -58,10 +59,14 @@ func (m *model) startInput(mode, value string) tea.Cmd {
 	return m.input.Focus()
 }
 func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
+	m.cancelSelection()
 	k := msg.String()
 	if k == "ctrl+c" {
 		m.close()
 		return tea.Quit
+	}
+	if m.mode == "history-search" {
+		return m.historySearchKey(msg)
 	}
 	if m.mode == "manifest-save" {
 		return m.manifestInputKey(msg)
@@ -76,6 +81,9 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		return m.logsInputKey(msg)
 	}
 	if m.mode == "command" || m.mode == "filter" {
+		if m.mode == "command" && k == "ctrl+r" {
+			return m.startHistorySearch()
+		}
 		if m.mode == "command" && (k == "up" || k == "down") {
 			m.recallCommand(k == "up")
 			return nil
@@ -99,9 +107,7 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 			m.mode = ""
 			m.input.Blur()
 			if mode == "command" {
-				cmd := m.command(strings.TrimSpace(value))
-				m.rememberCommand(value)
-				return cmd
+				return m.executeSubmittedCommand(value)
 			}
 			return nil
 		}
@@ -118,10 +124,6 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	if m.mode == "edit-loading" || m.mode == "editing" {
 		if k == "esc" || k == "q" {
-			if m.mode == "action-running" {
-				m.cancelAction()
-				m.notice = "Action request cancelled; refresh to check the final state"
-			}
 			m.cancelEdit()
 			m.mode = ""
 			m.notice = "Edit cancelled"
@@ -130,6 +132,32 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	if m.mode != "" {
+		if k == "ctrl+r" && m.mode == "operation-error" && (m.panelTitle == "Rollout history" || m.panelTitle == "Rollout history unavailable") {
+			return m.openRollouts(0)
+		}
+		if m.mode == "action-running" && (k == "esc" || k == "q") {
+			m.cancelAction()
+			m.mode = ""
+			m.resize()
+			m.notice = "Action request cancelled; refresh to check the final state"
+			return m.refreshResources()
+		}
+		if m.mode == "rollout-details" {
+			switch k {
+			case "esc":
+				return m.openPicker("rollouts")
+			case "d":
+				m.showRollout(m.rolloutSelected, true)
+				return nil
+			case "y":
+				m.showRollout(m.rolloutSelected, false)
+				return nil
+			case "r":
+				return m.confirmRollback(m.rolloutSelected)
+			case "ctrl+r":
+				return m.openRollouts(0)
+			}
+		}
 		if m.mode == "overview" {
 			switch k {
 			case "ctrl+r":
@@ -151,6 +179,11 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 			return m.openAccess(m.accessQuery)
 		}
 		if k == "esc" || k == "q" {
+			m.cancelRollouts()
+			if k == "esc" && m.mode == "logs" && m.logFullScreen {
+				m.toggleLogFullScreen()
+				return nil
+			}
 			m.cancelOverview()
 			m.cancelAccess()
 			m.cancelRelations()
@@ -159,6 +192,7 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 				m.updateInspector()
 			}
 			m.closeLog()
+			m.logFullScreen = false
 			if !m.eventGlobal {
 				m.closeEvents()
 			}
@@ -176,9 +210,23 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 			case "o":
 				return m.logsInput("log-save")
 			case "f":
+				m.toggleLogFullScreen()
+				return nil
+			case "F":
 				m.logFollow = !m.logFollow
 				m.logPrevious = false
 				return m.loadLogs()
+			case "s":
+				m.logTail = !m.logTail
+				if m.logTail {
+					m.logPaused = false
+				}
+				if !m.logPaused {
+					m.renderLogs()
+				} else {
+					m.logTitle()
+				}
+				return nil
 			case "space", " ":
 				m.logPaused = !m.logPaused
 				m.logTitle()
@@ -188,11 +236,19 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 				return nil
 			case "G", "end":
 				m.logTail = true
+				m.logTitle()
 			case "k", "up", "g", "home", "ctrl+u", "pgup", "ctrl+b":
 				m.logTail = false
+				m.logTitle()
 			}
 			if k == "w" {
-				m.panel.SoftWrap = !m.panel.SoftWrap
+				m.logWrap = !m.logWrap
+				m.panel.SoftWrap = m.logWrap
+				m.panel.SetYOffset(m.panel.YOffset())
+				m.logTitle()
+				if m.logTail {
+					m.panel.GotoBottom()
+				}
 				return nil
 			}
 			if k == "ctrl+r" {
@@ -288,6 +344,8 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 	switch k {
 	case "U":
 		return m.openOverview()
+	case "H":
+		return m.openRollouts(0)
 	case "A":
 		return m.openAccess("")
 	case "a":
@@ -396,7 +454,7 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 	case "?":
 		m.mode = "help"
 		m.panelTitle = "Help"
-		m.panel.SetContent(helpText)
+		m.panel.SetContent(m.renderHelp())
 		m.panel.GotoTop()
 	}
 	return nil
@@ -493,6 +551,7 @@ func (m *model) openLogs(previous bool) tea.Cmd {
 		return nil
 	}
 	m.logObject = o
+	m.logFullScreen = false
 	m.logPrevious = previous
 	_, m.logFollow = m.backend.(kube.LogStreamer)
 	containers := kube.Containers(o)
@@ -514,6 +573,10 @@ func (m *model) command(value string) tea.Cmd {
 	cmd := fields[0]
 	arg := strings.TrimSpace(strings.TrimPrefix(value, cmd))
 	m.notice = ""
+	if arg != "" && slices.Contains([]string{"q", "quit", "resources", "api", "actions", "permissions", "access", "overview", "related", "relations", "status", "shell", "forwards", "edit", "refresh", "help"}, cmd) {
+		m.notice = ":" + cmd + " does not take arguments"
+		return nil
+	}
 	switch cmd {
 	case "q", "quit":
 		m.close()
@@ -522,6 +585,12 @@ func (m *model) command(value string) tea.Cmd {
 		if arg == "" {
 			return m.openPicker("contexts")
 		}
+		resolved, err := m.resolveContext(arg)
+		if err != nil {
+			m.notice = kube.Safe(err.Error())
+			return nil
+		}
+		arg = resolved
 		if m.options.Demo {
 			if arg != "demo" {
 				m.notice = "Demo mode has one sample context."
@@ -560,6 +629,10 @@ func (m *model) command(value string) tea.Cmd {
 		r.fields = ""
 		r.labels = ""
 		return m.navigate(r, false)
+	case "alias":
+		return m.aliasCommand(arg, false)
+	case "unalias":
+		return m.aliasCommand(arg, true)
 	case "theme", "themes":
 		if arg == "" {
 			return m.openPicker("themes")
@@ -578,6 +651,10 @@ func (m *model) command(value string) tea.Cmd {
 		return m.openAccess("")
 	case "overview":
 		return m.openOverview()
+	case "rollout", "rollouts":
+		return m.rolloutCommand(arg, false)
+	case "rollback":
+		return m.rolloutCommand(arg, true)
 	case "can-i":
 		return m.openAccess(arg)
 	case "scale", "restart", "suspend", "resume", "run", "delete":
@@ -586,6 +663,8 @@ func (m *model) command(value string) tea.Cmd {
 		return m.manifestCommand(arg, true)
 	case "export":
 		return m.manifestCommand(arg, false)
+	case "download-dir":
+		m.downloadDirectoryCommand(arg)
 	case "related", "relations":
 		return m.openRelations()
 	case "layout", "layouts":
@@ -637,10 +716,18 @@ func (m *model) command(value string) tea.Cmd {
 		r.labels = arg
 		return m.navigate(r, false)
 	case "logs":
+		if arg != "" && arg != "previous" {
+			m.notice = "Use :logs or :logs previous"
+			return nil
+		}
 		return m.openLogs(arg == "previous")
 	case "events":
 		if arg == "selected" {
 			return m.openEvents()
+		}
+		if arg != "" {
+			m.notice = "Use :events or :events selected"
+			return nil
 		}
 		return m.changeResource("events", true)
 	case "status":
@@ -689,9 +776,13 @@ func (m *model) command(value string) tea.Cmd {
 	case "help":
 		m.mode = "help"
 		m.panelTitle = "Help"
-		m.panel.SetContent(helpText)
+		m.panel.SetContent(m.renderHelp())
 		m.panel.GotoTop()
 	default:
+		if arg != "" {
+			m.notice = "Resource commands do not take arguments; use :ns or :labels to set scope"
+			return nil
+		}
 		return m.changeResource(cmd, true)
 	}
 	return nil
@@ -707,6 +798,8 @@ func (m *model) openPicker(kind string) tea.Cmd {
 	m.choices = nil
 	m.pickerIndex = 0
 	switch kind {
+	case "rollouts":
+		m.choices = m.rolloutChoices()
 	case "actions":
 		if o, ok := m.current(); ok {
 			for _, action := range kube.Actions(o.GetKind()) {
@@ -759,13 +852,7 @@ func (m *model) openPicker(kind string) tea.Cmd {
 			m.choices = append(m.choices, choice{name, description})
 		}
 	case "contexts":
-		if m.options.Demo {
-			m.choices = []choice{{"demo", "offline sample cluster"}}
-		} else {
-			for _, c := range m.loader.Contexts() {
-				m.choices = append(m.choices, choice{c.Name, c.Cluster + " · " + c.Namespace})
-			}
-		}
+		m.choices = m.contextChoices()
 	case "resources":
 		for _, r := range m.resources {
 			scope := "cluster"
@@ -811,12 +898,32 @@ func (m *model) filterChoices() {
 }
 func (m *model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
+	case "ctrl+r":
+		if m.pickerKind == "rollouts" {
+			return m.openRollouts(0)
+		}
+		return nil
 	case "esc":
+		if m.pickerKind == "containers" || m.pickerKind == "shell-containers" {
+			kind := "logs"
+			if m.pickerKind == "shell-containers" {
+				kind = "shell"
+			}
+			for key, run := range m.commandExecutions {
+				if key.kind == kind && run.phase == "picker" {
+					delete(m.commandExecutions, key)
+				}
+			}
+		}
 		if m.pickerKind == "themes" {
 			m.setTheme(m.previousTheme)
 		}
 		m.mode = m.pickerReturn
 		m.input.Blur()
+		m.resize()
+		if m.showingLogs() && m.logTail && !m.logPaused {
+			m.panel.GotoBottom()
+		}
 		return nil
 	case "up", "ctrl+k":
 		m.pickerIndex = max(0, m.pickerIndex-1)
@@ -849,6 +956,10 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 			return m.actionCommand(c.name, "")
 		case "relations":
 			return m.selectRelation(c.name)
+		case "rollouts":
+			n, _ := strconv.ParseInt(strings.TrimPrefix(c.name, "revision "), 10, 64)
+			m.showRollout(n, false)
+			return nil
 		case "sort":
 			m.chooseOrder(c.name)
 		case "shell-containers":
@@ -863,7 +974,12 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 		case "layouts":
 			m.selectLayout(c.name)
 		case "contexts":
-			return m.connect(c.name)
+			name, err := m.resolveContext(c.name)
+			if err != nil {
+				m.notice = kube.Safe(err.Error())
+				return nil
+			}
+			return m.connect(name)
 		case "resources":
 			return m.changeResource(c.name, true)
 		case "containers":
@@ -904,16 +1020,22 @@ Navigation
 Explore
   :                  Command prompt; Tab / Shift+Tab cycle completions
   Up / Down          Recall last 50 commands in the command prompt
+  Ctrl+R in :        Reverse search successful command history
+  History search     Ctrl+R/S older/newer; Enter runs, Tab edits, Esc cancels
   /                  Fuzzy search: web0003 matches web-7c9f6d8b5-0003
   n / :ns            Browse namespaces; Enter selects one
   :ns NAME / :ns -A   Set namespace / all namespaces (also 0)
   c / :ctx           Search kubeconfig contexts (session only)
+  :alias NAME [CTX]  Save a short context name; :unalias NAME removes it
   r / :resources     Search discovered APIs / CRDs
   b / :related       Browse owners, backends, pods and storage relationships
   a / :actions       Scale/restart workloads; suspend/resume/run CronJobs
   D / :delete        Confirm deletion of the selected resource
   A / :permissions   Inspect identity and resource permissions
   U / :overview      Cluster health, capacity, usage and recent warnings
+  H / :rollouts      Deployment revisions, images and template comparison
+  Rollout details    d compare, y template, r confirmed rollback; Ctrl+R reload
+  :rollback REV      Confirm restoring a retained Deployment revision
   :can-i VERB        Check a selected resource action (optional subresource)
   :po :deploy :svc    Resource names, kinds, and aliases
   :labels app=web    Kubernetes label selector; :labels clears it
@@ -935,10 +1057,13 @@ Explore
   f                  Forward a pod/service port (LOCAL:REMOTE; LOCAL 0 auto)
   x (pod/service)    Stop forwards for the selected resource
   F / :forwards      Manage forwards; x stops the selected forward
-  Logs: c / p / w    Select container / previous instance / wrap; Ctrl+R reloads
+  Logs: w / s / f    Toggle wrapping / follow latest / logs-only terminal
+  Logs: c / p / F    Container / previous instance / live or snapshot
+  Drag text          Select and copy readable text; bottom-right confirmation
   e / :edit          Edit fresh resource in configured editor or $EDITOR
 
 Appearance and saved settings
+  :download-dir PATH  Default directory for all file exports; clear resets it
   t / :themes        Fuzzy theme picker; Escape cancels previews
   :layouts           Search and apply saved layout profiles
   :layout NAME       Apply layout directly
@@ -964,7 +1089,9 @@ decoded values for the selected Secret. x, closing details, selection/context
 changes, and editing hide them again. The reveal state is never saved.
 Editing reads a fresh full object, applies a versioned patch on saved changes,
 and retains the private file on errors/conflicts. Unchanged edits do not write.
-Live logs: Space pauses, / searches, o saves, f switches live/snapshot.
+Live logs: Space pauses, / searches, o saves, F switches live/snapshot.
+w wraps, s follows latest lines, f fills the terminal; Esc leaves focus first.
+Drag copies visible text using the terminal's OSC52 clipboard support.
 Snapshots: last 500 lines / 1 MiB per source; aggregate at most 4 MiB.
 Live logs retain 4 MiB / 10,000 lines and follow at most 64 containers.
 Metrics require the cluster Metrics API. cpu%/memory% compare pod limits

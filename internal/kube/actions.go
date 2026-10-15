@@ -24,6 +24,7 @@ type ActionPlan struct {
 	Object          unstructured.Unstructured
 	Action, Summary string
 	Replicas        int64
+	Rollback        *RolloutRevision
 }
 
 func Actions(kind string) []string {
@@ -34,12 +35,18 @@ func Actions(kind string) []string {
 	if slices.Contains([]string{"Deployment", "StatefulSet", "DaemonSet"}, kind) {
 		result = append(result, "restart")
 	}
+	if kind == "Deployment" {
+		result = append(result, "rollback")
+	}
 	if kind == "CronJob" {
 		result = append(result, "suspend", "resume", "run")
 	}
 	return append(result, "delete")
 }
 func PlanAction(r Resource, o unstructured.Unstructured, action, arg string) (ActionPlan, error) {
+	if action == "rollback" {
+		return ActionPlan{}, fmt.Errorf("select a retained revision from rollout history")
+	}
 	plan := ActionPlan{Resource: r, Object: *o.DeepCopy(), Action: action}
 	if !slices.Contains(Actions(o.GetKind()), action) {
 		return plan, fmt.Errorf("%s is unavailable for %s", action, o.GetKind())
@@ -66,6 +73,9 @@ func PlanAction(r Resource, o unstructured.Unstructured, action, arg string) (Ac
 	return plan, nil
 }
 func ApplyAction(ctx context.Context, b Backend, plan ActionPlan) (string, error) {
+	if plan.Action == "rollback" {
+		return applyRollback(ctx, b, plan)
+	}
 	arg := ""
 	if plan.Action == "scale" {
 		arg = strconv.FormatInt(plan.Replicas, 10)

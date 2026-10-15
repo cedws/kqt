@@ -26,3 +26,8 @@ jobs:
       - run: python3 scripts/features-smoke.py --feature watch
       - run: python3 scripts/features-smoke.py --feature access
       - run: python3 scripts/features-smoke.py --feature overview
+      - run: python3 scripts/features-smoke.py --feature downloads
+      - run: python3 scripts/features-smoke.py --feature logs-controls
+      - run: python3 scripts/features-smoke.py --feature rollouts
+      - run: python3 scripts/features-smoke.py --feature contexts
+      - run: python3 scripts/features-smoke.py --feature command-history
