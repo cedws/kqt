@@ -64,6 +64,23 @@ func conditionColour(kind, name, state, reason string) string {
 	}
 }
 
+func conditionStateLabel(state, severity string) string {
+	if state == "" {
+		state = "Unknown"
+	}
+	switch severity {
+	case "success":
+		return state + " · OK"
+	case "error":
+		return state + " · Problem"
+	case "warning":
+		if state != "Unknown" {
+			return state + " · Attention"
+		}
+	}
+	return state
+}
+
 func (m *model) resourceState(o unstructured.Unstructured) (string, string) {
 	if o.GetDeletionTimestamp() != nil {
 		return "Terminating", "warning"
@@ -171,7 +188,7 @@ func (m *model) renderResourceStatus(o unstructured.Unstructured, events []unstr
 			stale = fmt.Sprintf(" · stale (generation %d/%d)", observed, o.GetGeneration())
 			colour = "warning"
 		}
-		w.field(name, status+stale, colour)
+		w.field(name, conditionStateLabel(status, colour)+stale, colour)
 		w.note(reason)
 		w.note(kube.Text(condition, "message"))
 		if timestamp := kube.Text(condition, "lastTransitionTime"); timestamp != "" {

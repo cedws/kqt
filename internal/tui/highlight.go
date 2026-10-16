@@ -73,6 +73,7 @@ func yamlTokenColour(tk *token.Token) string {
 
 func (m *model) setTheme(t theme) {
 	m.theme = t
+	m.input.SetStyles(t.inputStyles())
 	m.logColours = nil
 	m.updateInspector()
 	if m.showingLogs() && !m.logPaused {

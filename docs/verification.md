@@ -555,3 +555,71 @@ filters, plain exports, invalid input in focus mode, custom windows/counts,
 saved defaults, and terminal restoration. Kubernetes request behavior was
 qualified with local HTTP fixtures; these additions were not exercised against
 an external cluster in this run.
+
+## Selectable no-color theme (2026-10-16)
+
+The `no-color` theme brings the bundled count to 35. All semantic colours use
+terminal defaults, including command/picker inputs and their cursors. Bold and
+underlined text remain available, and reverse video identifies selected rows,
+picker choices, mouse selections, and log matches. Switching or cancelling a
+preview restores the previous palette and text-input styles.
+
+A 120x40 true-colour demo terminal verified listing, completion, preview
+cancellation, saved selection/restart, colour-free commands/YAML/JSON/help,
+returning to Nord, and terminal restoration. A separate run with `NO_COLOR=1`
+verified that the environment setting still suppresses colours when Nord is
+selected. The rebuilt binary passed those checks without an external cluster.
+Full race tests, static checks, and all ten Python checks passed. Regression
+checks cover monochrome content and input widgets, preview cancellation,
+persistence/restart, restored colour themes, and existing geometry/highlighting
+behaviour across all 35 themes.
+
+## Colour-vision accessibility first pass (2026-10-16)
+
+`accessible-dark` and `accessible-light` bring the bundled count to 37. The
+palettes use blue, amber/yellow, and reddish purple status colours with light
+and dark selection fills respectively. Inputs, suggestions, placeholders,
+and cursor colours now follow semantic theme colours, including inherited
+custom themes and `no-color`.
+
+The audit retained written resource states, log severity names, permission
+decisions, selected-row markers, and `+`/`-` diffs. It added a `›` marker to
+focused frame headings, underlined log matches, and explicit condition
+interpretations alongside the original values: `Ready=False · Attention`,
+`DiskPressure=False · OK`, and `MemoryPressure=True · Problem`. Unknown custom
+predicates are not assigned a health interpretation. Stale generations retain
+their warning and stale text. Raw resource values and YAML/JSON resource
+exports are unchanged.
+
+Regression checks require at least 4.5:1 for normal/muted/accent/status/input
+text on both main and panel backgrounds, plus selected text on the selection
+fill. Borders/focus and selection fills require at least 3:1 against adjacent
+backgrounds. These pass for true colour and standard xterm 256-colour mapping.
+Every tested normal text pair is at least 5.56:1 for the dark preset and
+4.93:1 for the light preset across those profiles.
+
+The same demo resources, conditions, log levels, and search matches were
+rendered in both presets and `no-color` at 40x24, 80x28, and 120x36. Matching
+PNG previews are in `docs/screenshots/`. Screening used Machado (2009) at full
+severity for protan/deutan and Brettel (1997) for tritan, from DaltonLens at
+revision `3cba5e6a7c8f0e8199c8f83f1afb58eb6dab7a3d`, plus luminance greyscale.
+The compact preview transforms were checked numerically against DaltonLens.
+The lowest simulated text pairs across both profiles were above 5.01:1 (dark)
+and 4.68:1 (light). All 90 theme/view/simulation/profile comparison states
+rendered without browser errors; 320-, 736-, and 1024-pixel layouts fit without
+horizontal overflow.
+
+The full race/static/Python suite passed, including grapheme/text-width checks
+for underlined joined emoji and existing geometry checks across all 37 themes.
+The underline wraps complete matches so styling does not split graphemes.
+Native demo terminals verified both presets through listing, completion,
+cancelled previews, persisted selection, YAML/JSON key colours, metadata views,
+and terminal restoration in true colour and 256-colour profiles.
+The existing three-layout/restart terminal suite passed at 80x24, 180x48,
+and 80x40. Separate terminal runs verified saved `no-color` restarts and that
+`NO_COLOR=1` still suppresses colours after selecting Nord.
+
+This is a contrast-qualified, simulation-screened first pass. A user study has
+not been performed. Individual colour vision, fonts, displays, and custom
+terminal palettes remain user-validation needs; `no-color` inherits terminal
+defaults and its contrast is controlled by the terminal configuration.

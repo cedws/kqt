@@ -21,10 +21,12 @@ func (m *model) frame(title, content string, width, height int, focused bool, hi
 	height = max(2, height)
 	inner := width - 2
 	b := m.theme.style("border")
+	marker := "─ "
 	if focused {
 		b = m.theme.style("focus").Bold(true)
+		marker = "› "
 	}
-	top := b.Render("─ " + kube.Safe(title))
+	top := b.Render(marker + kube.Safe(title))
 	if len(hints) > 0 {
 		top += m.theme.style("muted").Render(" · ") + m.shortcuts(" · ", hints...)
 	}
@@ -209,7 +211,7 @@ func (m *model) table(width, height int) string {
 		}
 		line := fit(marker+ansi.Cut(strings.Join(cells, " "), x, x+max(0, inner-2)), inner)
 		if i == m.selected {
-			line = lipgloss.NewStyle().Foreground(m.theme.color("selection_foreground")).Background(m.theme.color("selection_background")).Bold(true).Render(line)
+			line = m.theme.selectionStyle().Bold(true).Render(line)
 		}
 		lines = append(lines, line)
 	}
@@ -269,7 +271,7 @@ func (m *model) pickerView(width, height int) string {
 		text := "  " + label
 		if i == m.pickerIndex {
 			text = "› " + label
-			text = lipgloss.NewStyle().Foreground(m.theme.color("selection_foreground")).Background(m.theme.color("selection_background")).Render(fit(text, width-2))
+			text = m.theme.selectionStyle().Render(fit(text, width-2))
 		}
 		lines = append(lines, text)
 	}

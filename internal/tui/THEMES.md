@@ -4,6 +4,10 @@ The semantic palettes in `themes.go` adapt the following upstream color schemes.
 Some status and muted colors are adjusted for contrast in the terminal browser.
 Only palette values are adapted; no editor plugin code is included.
 
+The built-in `no-color` theme uses terminal-default colours throughout,
+including text inputs. It keeps bold/underlined text and uses reverse video
+for selections without setting a foreground or background colour.
+
 | Palette | Source | License copy |
 | --- | --- | --- |
 | Nord | https://github.com/nordtheme/nord | [MIT](licenses/nord.txt) |
@@ -41,3 +45,42 @@ terminal readability. Its upstream repository supplies no explicit license;
 only its palette values are referenced here, with attribution retained.
 
 Retain these notices when distributing the bundled palettes.
+
+## Accessible presets
+
+`accessible-dark` and `accessible-light` are kqt palettes informed by
+[Okabe and Ito's Color Universal Design guidance](https://jfly.uni-koeln.de/color/).
+They use blue for success/information, yellow or dark amber for attention,
+and reddish purple for problems. The light preset darkens these accents for
+text on pale backgrounds. These are design choices, not a claim that one set
+of colours covers every person's colour vision.
+
+Both presets target at least 4.5:1 for normal, muted, status, and input text on
+the main and panel backgrounds, and for selected text on its selection fill.
+Borders/focus cues and selection fills target 3:1 against adjacent backgrounds.
+Those targets use [WCAG text contrast](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
+and [non-text contrast](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html)
+as design guidance for this terminal interface, without asserting WCAG conformance.
+Checks include the standard xterm 256-colour conversion. Custom terminal
+palettes, display settings, and fonts can affect the result.
+
+Meaning is also available without colour: table/picker selection markers,
+focused-pane heading markers, written status/log levels, underlined log
+matches, `+`/`-` diffs, and `OK`/`Attention`/`Problem` labels for known condition
+predicates. Unknown custom conditions keep their reported values without an
+invented health interpretation. Inputs follow semantic theme colours,
+including inherited custom themes.
+
+These matching demo previews contain sample data only:
+
+| Accessible dark | Accessible light | No colour (example terminal defaults) |
+| --- | --- | --- |
+| [Preview](../../docs/screenshots/accessible-dark.png) | [Preview](../../docs/screenshots/accessible-light.png) | [Preview](../../docs/screenshots/no-color.png) |
+
+The comparison was screened in greyscale and with full-severity protan/deutan
+simulations using Machado (2009), plus Brettel (1997) for tritan simulation,
+through [DaltonLens](https://github.com/DaltonLens/DaltonLens-Python/tree/3cba5e6a7c8f0e8199c8f83f1afb58eb6dab7a3d).
+Simulation is approximate. Feedback from users with colour-vision deficiencies
+is still needed; the presets have not been qualified by a user study.
+The `no-color` preview uses example dark terminal defaults; its actual contrast
+is controlled by the user's terminal.

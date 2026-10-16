@@ -61,7 +61,8 @@ func TestLogJSONDetectionAndSeverityColours(t *testing.T) {
 				}
 			}
 			for _, plain := range []string{`{"message":123,}`, `text {"message":123}`, `  "message": 123,`} {
-				if strings.Contains(palette.renderLogLine(plain), palette.style("accent").Render(`"message"`)) {
+				key := palette.style("accent").Render(`"message"`)
+				if key != `"message"` && strings.Contains(palette.renderLogLine(plain), key) {
 					t.Fatalf("incomplete/non-JSON message treated as JSON: %s", plain)
 				}
 			}

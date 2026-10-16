@@ -283,7 +283,7 @@ func (m *model) View() tea.View {
 	if s := m.selection; s != nil && s.moved && m.selectionValid(v.Content) {
 		lines := strings.Split(v.Content, "\n")
 		start, end := s.ordered()
-		style := m.theme.style("selection_foreground").Background(m.theme.color("selection_background"))
+		style := m.theme.selectionStyle()
 		for y := start.y; y <= end.y; y++ {
 			left, right := s.span(y)
 			left, right = left+s.bounds.x, right+s.bounds.x

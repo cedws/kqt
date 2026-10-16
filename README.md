@@ -436,7 +436,7 @@ JSON Pointer columns such as `/spec/replicas` and
 `/metadata/labels/app.kubernetes.io~1name` are supported. Numeric fields sort
 numerically; age uses creation time.
 
-kqt bundles 34 themes, including `material`, `palenight`, `dracula`, `darcula`,
+kqt bundles 37 themes, including `material`, `palenight`, `dracula`, `darcula`,
 `monokai`, `ubuntu`, `lemonade`, and `pink-lemonade`. The VS Code references are
 Radu Matei's Ubuntu Color Theme, Denner's Lemonade, and Casseopeian's light pink
 Pink Lemonade. Ayu includes `ayu-dark`, `ayu-mirage`, and `ayu-light`.
@@ -444,8 +444,24 @@ Everforest includes `everforest-dark-hard`, `everforest-dark-medium`, `everfores
 and the matching `everforest-light-*` variants. Use `:themes` to preview them or
 set one directly, for example `:theme ayu-mirage` or
 `:theme everforest-dark-medium`. `kqt themes` lists them. `--theme`
-overrides `KQT_THEME`, which overrides the saved theme. Define custom themes in
-TOML files under `themes/NAME.toml` beside the settings file:
+overrides `KQT_THEME`, which overrides the saved theme.
+
+`accessible-dark` and `accessible-light` use blue, amber/yellow, and reddish
+purple status colours with contrasting selections and readable input fields.
+Choose either with `:themes` or `:theme accessible-dark`. Across themes, focused
+panes have a `›` heading marker, log search matches are underlined, and known
+Kubernetes conditions include `OK`, `Attention`, or `Problem` interpretations
+alongside their original values. See [accessibility design and previews](internal/tui/THEMES.md#accessible-presets)
+for the contrast targets, sources, and validation limits.
+
+Select `no-color` from `:themes`, run `:theme no-color`, or launch with
+`kqt --theme no-color` to use your terminal's default foreground and background
+without colour styling. Bold, underlining, and reverse-video selections keep
+the interface readable. The choice is saved like other themes; `NO_COLOR`
+continues to suppress colours regardless of the selected theme.
+
+Define custom themes in TOML files under `themes/NAME.toml` beside the settings
+file:
 
 ```toml
 version = 1

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
 )
 
@@ -27,8 +28,15 @@ func palette(name, bg, surface, fg, muted, border, accent, selected, success, wa
 }
 
 func builtThemes() map[string]theme {
+	accessibleDark := palette("accessible-dark", "#121212", "#1c1c1c", "#f0f0f0", "#bcbcbc", "#949494", "#56b4e9", "#e4e4e4", "#56b4e9", "#f0e442", "#cc79a7")
+	accessibleDark.Colors["selection_foreground"] = "#121212"
+	accessibleLight := palette("accessible-light", "#ffffff", "#f4f4f4", "#1c1c1c", "#585858", "#767676", "#005f87", "#303030", "#005f87", "#805500", "#882255")
+	accessibleLight.Colors["selection_foreground"] = "#ffffff"
 	values := []theme{
 		palette("terminal", "default", "default", "default", "7", "8", "6", "4", "2", "3", "1"),
+		palette("no-color", "default", "default", "default", "default", "default", "default", "default", "default", "default", "default"),
+		accessibleDark,
+		accessibleLight,
 		palette("nord", "#2e3440", "#3b4252", "#eceff4", "#d8dee9", "#4c566a", "#88c0d0", "#434c5e", "#a3be8c", "#ebcb8b", "#bf616a"),
 		palette("rose-pine", "#191724", "#1f1d2e", "#e0def4", "#908caa", "#524f67", "#c4a7e7", "#403d52", "#9ccfd8", "#f6c177", "#eb6f92"),
 		palette("rose-pine-moon", "#232136", "#2a273f", "#e0def4", "#908caa", "#56526e", "#c4a7e7", "#44415a", "#9ccfd8", "#f6c177", "#eb6f92"),
@@ -85,6 +93,24 @@ func (t theme) color(token string) color.Color {
 }
 func (t theme) style(token string) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(t.color(token))
+}
+func (t theme) selectionStyle() lipgloss.Style {
+	style := t.style("selection_foreground").Background(t.color("selection_background"))
+	if t.Colors["selection_foreground"] == "default" && t.Colors["selection_background"] == "default" {
+		style = style.Reverse(true)
+	}
+	return style
+}
+func (t theme) inputStyles() textinput.Styles {
+	styles := textinput.DefaultDarkStyles()
+	styles.Focused = textinput.StyleState{
+		Text: t.style("foreground"), Placeholder: t.style("muted"),
+		Prompt: t.style("accent"), Suggestion: t.style("muted"),
+	}
+	styles.Blurred = styles.Focused
+	styles.Blurred.Text = t.style("muted")
+	styles.Cursor.Color = t.color("foreground")
+	return styles
 }
 func loadThemes(directory string) (map[string]theme, error) {
 	result := builtThemes()

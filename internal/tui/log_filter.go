@@ -371,10 +371,12 @@ func (t theme) highlightLogMatches(styled string, spans []logSpan) string {
 	}
 	var out strings.Builder
 	end := 0
-	style := t.style("selection_foreground").Background(t.color("selection_background")).Bold(true)
+	style := t.selectionStyle().Bold(true)
 	for _, span := range cells {
 		out.WriteString(ansi.Cut(styled, end, span.from))
-		out.WriteString(style.Render(ansi.Strip(ansi.Cut(styled, span.from, span.to))))
+		// Underline the complete span without inserting escapes inside joined emoji.
+		match := style.Render(ansi.Strip(ansi.Cut(styled, span.from, span.to)))
+		out.WriteString(ansi.NewStyle().Underline(true).Styled(match))
 		end = span.to
 	}
 	out.WriteString(ansi.Cut(styled, end, column))

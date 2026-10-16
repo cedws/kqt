@@ -222,6 +222,7 @@ func newModel(ctx context.Context, s *Settings, o Options, l *kube.Loader) (*mod
 	m.inspector = viewport.New()
 	m.inspector.SoftWrap = true
 	m.input = textinput.New()
+	m.input.SetStyles(m.theme.inputStyles())
 	m.input.CharLimit = 256
 	m.input.SetWidth(74)
 	if o.Demo {
