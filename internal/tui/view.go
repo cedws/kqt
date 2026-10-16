@@ -64,7 +64,7 @@ func (m *model) inspectorDimensions() dimensions {
 func (m *model) resize() {
 	m.input.SetWidth(max(1, m.width-8))
 	m.resizeHistorySearch()
-	if m.mode == "manifest-save" || m.showingLogs() && m.mode != "logs" || m.mode == "event-save" {
+	if m.mode == "manifest-save" || m.showingLogs() && m.mode != "logs" || m.mode == "event-save" || m.mode == "debug-image" {
 		m.input.SetWidth(max(1, m.width-ansi.StringWidth(m.input.Prompt)-2))
 		m.input.SetCursor(m.input.Position()) // Reflow long paths immediately after a resize.
 	}
@@ -287,6 +287,9 @@ func (m *model) pickerView(width, height int) string {
 	}
 	lines = append(lines, "", m.theme.style("muted").Render(" Type to search · ")+m.shortcuts(" · ", hints...))
 	title := strings.Title(m.pickerKind)
+	if m.pickerKind == "debug-image-source" {
+		title = "Debug image · first use"
+	}
 	if m.pickerKind == "log-options" {
 		title = "Log options · saved as defaults"
 	}
@@ -424,14 +427,14 @@ func (m *model) baseView() tea.View {
 				status += " · resynced; history may have gaps"
 			}
 		}
-		if m.mode == "command" || m.mode == "history-search" || m.mode == "filter" || m.showingLogs() && m.mode != "logs" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" || m.mode == "action-confirm" {
+		if m.mode == "command" || m.mode == "history-search" || m.mode == "filter" || m.showingLogs() && m.mode != "logs" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" || m.mode == "action-confirm" || m.mode == "debug-image" {
 			status = m.input.View()
 			token = "foreground"
 		}
 		lines = append(lines, m.theme.style(token).Render(fit(status, w)))
 		lines = append(lines, m.theme.style("muted").Render(fit(m.footerHelp(d), w)))
 		content = strings.Join(lines, "\n")
-		if m.mode == "picker" || m.mode == "details" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" || m.mode == "relations-loading" || m.mode == "rollouts-loading" || m.mode == "rollout-details" || m.mode == "action-confirm" || m.mode == "action-running" || m.mode == "access" || m.mode == "access-loading" || m.mode == "overview" {
+		if m.mode == "picker" || m.mode == "details" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" || m.mode == "relations-loading" || m.mode == "rollouts-loading" || m.mode == "rollout-details" || m.mode == "action-confirm" || m.mode == "action-running" || m.mode == "access" || m.mode == "access-loading" || m.mode == "overview" || m.showingDebug() {
 			mw, mh := w-4, h-4
 			modal := ""
 			if m.mode == "picker" {
@@ -440,7 +443,11 @@ func (m *model) baseView() tea.View {
 				modal = m.pickerView(mw, mh)
 			} else {
 				hints := []shortcut{{"Esc", "close"}, {"hjkl", "scroll"}}
-				if m.mode == "action-confirm" {
+				if m.mode == "debug-image" {
+					hints = []shortcut{{"Enter", "save and continue"}, {"Esc", "cancel"}}
+				} else if m.mode == "debug-confirm" {
+					hints = []shortcut{{"Enter", "start"}, {"c", "container"}, {"d", "details"}, {"Esc", "cancel"}}
+				} else if m.mode == "action-confirm" {
 					hints = []shortcut{{"Enter", "confirm"}, {"Esc", "cancel"}}
 				} else if m.mode == "rollout-details" {
 					hints = []shortcut{{"d", "compare"}, {"y", "template"}, {"r", "rollback"}, {"Esc", "close"}, {"hjkl", "scroll"}}

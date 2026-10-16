@@ -31,6 +31,8 @@ smoke: build
     python3 scripts/features-smoke.py --feature rollouts
     python3 scripts/features-smoke.py --feature contexts
     python3 scripts/features-smoke.py --feature command-history
+    python3 scripts/features-smoke.py --feature debug
+    python3 scripts/features-smoke.py --feature debug-setup
 
 smoke-live: build
     sh scripts/live-smoke.sh

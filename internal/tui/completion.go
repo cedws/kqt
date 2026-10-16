@@ -3,6 +3,8 @@ package tui
 import (
 	"slices"
 	"strings"
+
+	"github.com/z0mbix/kqt/internal/kube"
 )
 
 type completionState struct {
@@ -11,7 +13,7 @@ type completionState struct {
 	index   int
 }
 
-var commandNames = []string{"alias", "unalias", "rollout", "rollouts", "rollback", "overview", "access", "can-i", "permissions", "actions", "api", "delete", "restart", "resume", "run", "scale", "suspend", "columns", "copy", "context", "contexts", "ctx", "download-dir", "edit", "events", "export", "forward", "forwards", "help", "inspector", "label", "labels", "layout", "layouts", "logs", "metadata", "metrics", "namespace", "ns", "q", "quit", "refresh", "related", "relations", "resources", "shell", "sort", "status", "theme", "themes", "write"}
+var commandNames = []string{"debug", "alias", "unalias", "rollout", "rollouts", "rollback", "overview", "access", "can-i", "permissions", "actions", "api", "delete", "restart", "resume", "run", "scale", "suspend", "columns", "copy", "context", "contexts", "ctx", "download-dir", "edit", "events", "export", "forward", "forwards", "help", "inspector", "label", "labels", "layout", "layouts", "logs", "metadata", "metrics", "namespace", "ns", "q", "quit", "refresh", "related", "relations", "resources", "shell", "sort", "status", "theme", "themes", "write"}
 
 func (m *model) completeCommand(reverse bool) {
 	value := m.input.Value()
@@ -34,6 +36,16 @@ func (m *model) completeCommand(reverse bool) {
 			prefix := parts[0] + " "
 			var names []string
 			switch parts[0] {
+			case "debug":
+				names = []string{"attach"}
+				for name := range m.settings.Config.Debug.Profiles {
+					names = append(names, name)
+				}
+				if pod, ok := m.current(); ok {
+					for _, container := range kube.DebugContainers(pod) {
+						names = append(names, "attach "+container.Name)
+					}
+				}
 			case "unalias":
 				for alias := range m.settings.Config.ContextAliases {
 					names = append(names, alias)

@@ -36,6 +36,12 @@ func (m *model) footerHelp(d dimensions) string {
 		hints = []shortcut{{"↑/↓", "history"}, {"Ctrl+R", "search"}, {"Tab/Shift+Tab", "complete"}, {"Enter", "run"}, {"Esc", "cancel"}}
 	} else if m.mode == "history-search" {
 		return m.historySearchPreview()
+	} else if m.mode == "debug-image" {
+		return " " + m.shortcuts("  ", shortcut{"Enter", "save and continue"}, shortcut{"Esc", "cancel"})
+	} else if m.mode == "debug-confirm" {
+		return " " + m.shortcuts("  ", shortcut{"Enter", "start"}, shortcut{"c", "container"}, shortcut{"d", "details"}, shortcut{"Esc", "cancel"})
+	} else if m.showingDebug() {
+		return " " + m.shortcuts("  ", shortcut{"Esc", "cancel waiting"})
 	} else if m.mode == "action-confirm" {
 		return m.theme.style("muted").Render(" Type the resource name shown  ") + m.shortcuts("  ", shortcut{"Enter", "confirm"}, shortcut{"Esc", "cancel"})
 	} else if m.mode == "" && len(m.resourceForwards()) > 0 {

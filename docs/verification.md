@@ -556,6 +556,53 @@ saved defaults, and terminal restoration. Kubernetes request behavior was
 qualified with local HTTP fixtures; these additions were not exercised against
 an external cluster in this run.
 
+## Ephemeral debug containers (2026-10-16)
+
+The debug operation uses the existing client-go session and a dedicated
+`pods/ephemeralcontainers` JSON patch, followed by `pods/attach`. Tests cover
+namespace/name-scoped reviews, denied create/patch/get permissions, POST-only
+attachment, unavailable reviews, strict patch paths, UID/resource-version tests,
+preserved pod specification, changed admission responses, stale selections,
+image/configuration failures, start timeouts and one-attempt persistent creation.
+Read-only checks, config/profile precedence, YAML/TOML saves, start confirmation,
+redacted admission environment values, cancelled/failed command history and
+40x12 through 180x48 modal geometry are covered by UI tests.
+
+Full race tests, static checks and ten Python checks passed. The complete
+terminal regression suite passed, including a new demo workflow for configured
+images, automatic/optional target selection, cancelled confirmation, terminal handoff,
+disconnect, reattach and exit. All six darwin/linux/freebsd amd64/arm64 builds
+succeeded. The final highlighted preview also passed the focused terminal test.
+
+A disposable k3d Kubernetes 1.36.2 cluster qualified real dry-run, persistent
+creation, startup, WebSocket and SPDY attachment, disconnect/reattach and rejected
+privileged admission. The fixture used a Restricted namespace and tainted node;
+the debug identity only had name-scoped Pod get, ephemeral patch and attach.
+It was explicitly denied exec, Pod creation, node listing and Secret reads.
+The cluster was removed afterward. The tests exposed status-version races during
+dry-run; bounded retries now re-read the same UID/spec before retrying previews,
+while persistent creation is still attempted only once.
+
+The live fixture uses an explicit public BusyBox image. Private ECR credentials,
+organisation-specific admission webhooks, other runtimes and native FreeBSD/Linux
+terminal attachment remain outside this qualification. Configuration and failure
+details are in [debug containers](debug-containers.md).
+
+First-use image setup is covered by focused race and terminal checks: an empty
+configuration offers an approved-image input or an explicit public BusyBox
+choice, validates the reference, saves a private default profile and reuses it.
+BusyBox explicitly saves UID 1000. Cancelled/invalid inputs and failed writes
+leave configuration and pending command history unchanged. YAML/TOML tests
+preserve existing profiles/settings, YAML comments and owner-only permissions.
+Long image references retain the modal's width at small terminal sizes.
+
+The streamlined flow uses a compact summary and Enter to start on the selected
+Pod, without retyping its name. Tests cover automatic container choice, the
+default-container annotation, optional target/detail controls, returning from the
+optional picker, and direct reattachment when only one debug container exists.
+Choosing BusyBox saves it immediately; a custom image needs only its one-time
+input. Backend permission, admission and UID/version checks are unchanged.
+
 ## Selectable no-color theme (2026-10-16)
 
 The `no-color` theme brings the bundled count to 35. All semantic colours use

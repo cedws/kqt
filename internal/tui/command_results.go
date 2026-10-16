@@ -90,11 +90,15 @@ func (m *model) executeSubmittedCommand(value string) tea.Cmd {
 			m.addHistoryExecution(value, "logs", "picker", m.logToken)
 		case "shell-containers":
 			m.addHistoryExecution(value, "shell", "picker", m.shellToken)
+		case "debug-image-source", "debug-profiles", "debug-targets", "debug-attach":
+			m.addHistoryExecution(value, "debug", "picker", m.debugToken)
 		default:
 			m.rememberCommandAt(value, sequence)
 		}
 	case "action-confirm":
 		m.addHistoryExecution(value, "action", "", m.actionToken)
+	case "debug-loading":
+		m.addHistoryExecution(value, "debug", "", m.debugToken)
 	case "relations-loading":
 		m.addHistoryExecution(value, "relations", "", m.relationToken)
 	case "rollouts-loading":
@@ -135,6 +139,15 @@ func (m *model) historyExecutionFor(msg tea.Msg) *historyExecution {
 	var key historyOperation
 	valid := false
 	switch v := msg.(type) {
+	case debugPreparedMsg:
+		key = historyOperation{"debug", v.generation, v.token}
+		valid = v.generation == m.generation && v.token == m.debugToken && m.mode == "debug-loading"
+	case debugStartedMsg:
+		key = historyOperation{"debug", v.generation, v.token}
+		valid = v.generation == m.generation && v.token == m.debugToken && m.mode == "debug-starting"
+	case debugClosedMsg:
+		key = historyOperation{"debug", v.generation, v.token}
+		valid = v.generation == m.generation && v.token == m.debugToken && m.mode == "shell"
 	case connectedMsg:
 		key = historyOperation{"connect", v.generation, 0}
 		valid = v.generation == m.generation
@@ -199,6 +212,12 @@ func (m *model) observeCommandResult(run *historyExecution, msg tea.Msg) {
 	}
 	complete, success := true, false
 	switch v := msg.(type) {
+	case debugPreparedMsg:
+		complete = v.err != nil
+	case debugStartedMsg:
+		complete = v.err != nil
+	case debugClosedMsg:
+		success = v.err == nil && (!v.disconnected || v.connected)
 	case connectedMsg:
 		delete(m.commandExecutions, run.operation)
 		if v.err == nil && m.dataErr == "" {

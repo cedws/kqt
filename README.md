@@ -109,6 +109,8 @@ accent colour, with muted descriptions: `j/k: move`, `Tab: inspector`, `Esc: clo
 | `M`, `:metadata` | Resource labels, annotations and finalizers in the same panel |
 | `m`, `:metrics on` / `off` | Toggle pod/node CPU and memory columns |
 | `s`, `:shell` | Open a shell in a running pod/container |
+| `B`, `:debug [PROFILE]` | Preview, confirm and attach an ephemeral debug container |
+| `:debug attach [NAME]` | Reattach an existing ephemeral debug container |
 | `f`, `:forward LOCAL:REMOTE` | Forward a pod/service port to localhost |
 | `x` on a pod/service | Stop forwards associated with the selected resource |
 | `F`, `:forwards` | View/manage forwards; `x` stops the selected forward |
@@ -344,6 +346,26 @@ unrelated forwards. Listeners bind only to `127.0.0.1`. Up to 16 forwards
 can run concurrently; namespace changes retain them, context changes and quitting
 close them. Forwarding uses native client-go. Shells and forwards try WebSocket
 transport with SPDY fallback for compatible upgrade/proxy failures.
+
+## Ephemeral debug containers
+
+Select a Pod and press `B`, or use `:debug PROFILE`. On first use, choose your own
+approved image or explicitly choose public BusyBox, then save it for later use.
+Profiles live under `debug.profiles` and support
+private ECR references, commands, pull policy, Kubernetes security contexts and
+per-context/per-namespace defaults. Defaults run non-root, drop all capabilities,
+disable privilege escalation and use RuntimeDefault seccomp.
+
+The flow checks scoped permissions and server-side admission automatically,
+then shows the selected Pod, image and target. Press `Enter` to start; `c` changes
+the container and `d` shows full details. It joins the
+existing Pod, preserving node placement, tolerations and pull credentials, and
+uses `pods/attach` without requiring `pods/exec`. Read-only mode disables it.
+`Ctrl+]` disconnects; `:debug attach [NAME]` reconnects. Use `exit` to stop the
+shell; its ephemeral entry remains in the Pod spec.
+
+See [debug configuration, RBAC and lifecycle details](docs/debug-containers.md)
+for a private-registry example and cluster compatibility notes.
 
 ## Editing
 
@@ -602,7 +624,7 @@ as a denial. Kubernetes admission policies can impose further rules. `Ctrl+R`
 rechecks and Escape closes the panel.
 
 Start with `kqt --read-only` or configure `read_only: true` to disable editing,
-workload operations and pod shells. The header displays **READ ONLY**. Inspection,
+workload operations, pod shells and debug containers. The header displays **READ ONLY**. Inspection,
 logs/events, permission reviews, clipboard/file exports and port forwarding remain
 available. `--read-only=false` explicitly overrides a configured read-only default
 for that session. This mode restricts kqt's controls; it does not alter your

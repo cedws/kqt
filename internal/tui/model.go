@@ -88,6 +88,9 @@ type logsMsg struct {
 }
 
 type model struct {
+	debug                                    *debugState
+	debugToken                               uint64
+	debugCancel                              context.CancelFunc
 	historySearch                            *historySearch
 	historySuccesses                         []historySuccess
 	commandSequence                          uint64
@@ -303,6 +306,7 @@ func (m *model) close() {
 	m.closeLog()
 	m.closeEvents()
 	m.cancelShell()
+	m.cancelDebug()
 	m.stopForwards()
 	m.cancelEdit()
 	m.session.close()
@@ -436,6 +440,7 @@ func (m *model) poll() tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg { return pollMsg{g, id} })
 }
 func (m *model) navigate(r route, remember bool) tea.Cmd {
+	m.cancelDebug()
 	m.cancelRollouts()
 	m.cancelOverview()
 	m.cancelAccess()
@@ -850,6 +855,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case shellClosedMsg:
 		return m, m.shellClosed(v)
+	case debugPreparedMsg:
+		return m, m.debugPrepared(v)
+	case debugStartedMsg:
+		return m, m.debugStarted(v)
+	case debugClosedMsg:
+		return m, m.debugClosed(v)
 	case forwardMsg:
 		return m, m.forwardUpdate(v)
 	case themeHiddenMsg:
@@ -880,7 +891,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.copyFlash = ""
 		}
 	default:
-		if m.mode == "command" || m.mode == "history-search" || m.mode == "filter" || m.mode == "picker" || m.showingLogs() && m.mode != "logs" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" || m.mode == "action-confirm" {
+		if m.mode == "command" || m.mode == "history-search" || m.mode == "filter" || m.mode == "picker" || m.showingLogs() && m.mode != "logs" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" || m.mode == "action-confirm" || m.mode == "debug-image" {
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
 			return m, cmd

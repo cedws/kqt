@@ -68,6 +68,9 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 	if m.mode == "history-search" {
 		return m.historySearchKey(msg)
 	}
+	if m.showingDebug() {
+		return m.debugKey(msg)
+	}
 	if m.mode == "manifest-save" {
 		return m.manifestInputKey(msg)
 	}
@@ -182,6 +185,7 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 			return m.openAccess(m.accessQuery)
 		}
 		if k == "esc" || k == "q" {
+			m.cancelDebug()
 			m.cancelRollouts()
 			if k == "esc" && m.mode == "logs" && m.logFullScreen {
 				m.toggleLogFullScreen()
@@ -363,6 +367,8 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	switch k {
+	case "B":
+		return m.openDebug("")
 	case "U":
 		return m.openOverview()
 	case "H":
@@ -781,6 +787,8 @@ func (m *model) command(value string) tea.Cmd {
 		return m.toggleMetrics()
 	case "shell":
 		return m.openShell()
+	case "debug":
+		return m.openDebug(arg)
 	case "forward":
 		if arg == "" {
 			return m.promptForward()
@@ -820,6 +828,8 @@ func (m *model) openPicker(kind string) tea.Cmd {
 	m.choices = nil
 	m.pickerIndex = 0
 	switch kind {
+	case "debug-image-source", "debug-profiles", "debug-targets", "debug-attach":
+		m.choices = m.debugChoices(kind)
 	case "log-options":
 		m.choices = m.logOptionChoices()
 	case "rollouts":
@@ -928,6 +938,9 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	case "esc":
+		if strings.HasPrefix(m.pickerKind, "debug-") && m.pickerReturn != "debug-confirm" {
+			m.cancelDebug()
+		}
 		if m.pickerKind == "containers" || m.pickerKind == "shell-containers" {
 			kind := "logs"
 			if m.pickerKind == "shell-containers" {
@@ -945,6 +958,9 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.mode = m.pickerReturn
 		m.input.Blur()
 		m.resize()
+		if m.mode == "debug-confirm" && m.debug != nil {
+			m.renderDebugPreview()
+		}
 		if m.showingLogs() && m.logTail && !m.logPaused {
 			m.panel.GotoBottom()
 		}
@@ -976,6 +992,22 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.mode = ""
 		m.input.Blur()
 		switch m.pickerKind {
+		case "debug-image-source":
+			if c.name == "Use BusyBox" {
+				return m.useBusyBoxDebugImage()
+			}
+			return m.promptDebugImage()
+		case "debug-profiles":
+			return m.chooseDebugProfile(c.name)
+		case "debug-targets":
+			m.debug.target = c.name
+			if c.name == "<pod network>" {
+				m.debug.target = ""
+			}
+			return m.prepareDebug()
+		case "debug-attach":
+			m.debug.attach = c.name
+			return m.prepareDebug()
 		case "log-options":
 			return m.chooseLogOption(c.name)
 		case "actions":
@@ -1080,6 +1112,10 @@ Explore
   Events             Space pause, / filter, G follow latest, o save
   m / :metrics       Toggle pod/node CPU and memory columns
   s / :shell         Shell in a running pod/container; Ctrl+] disconnects
+  B / :debug         Ephemeral debug container using a configured image profile
+  :debug PROFILE     Use a saved image; Enter starts on the selected pod
+  Debug preview      c changes the target container; d shows full details
+  :debug attach NAME Reattach an existing debugger; Ctrl+] leaves it running
   f                  Forward a pod/service port (LOCAL:REMOTE; LOCAL 0 auto)
   x (pod/service)    Stop forwards for the selected resource
   F / :forwards      Manage forwards; x stops the selected forward

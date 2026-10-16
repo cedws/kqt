@@ -47,6 +47,7 @@ type config struct {
 	Shell           string                   `toml:"shell,omitempty" yaml:"shell,omitempty"`
 	DownloadDir     string                   `toml:"download_dir,omitempty" yaml:"download_dir,omitempty"`
 	Logs            logPreferences           `toml:"logs" yaml:"logs"`
+	Debug           debugConfig              `toml:"debug,omitempty" yaml:"debug,omitempty"`
 	CommandHistory  []string                 `toml:"command_history,omitempty" yaml:"command_history,omitempty"`
 	ReadOnly        bool                     `toml:"read_only,omitempty" yaml:"read_only,omitempty"`
 	Views           map[string]viewConfig    `toml:"views,omitempty" yaml:"views,omitempty"`
@@ -150,6 +151,9 @@ func LoadSettings(path string) (*Settings, error) {
 		c.Contexts = map[string]contextState{}
 	}
 	c.CommandHistory = boundedCommandHistory(c.CommandHistory)
+	if err = validateDebugConfig(c.Debug); err != nil {
+		return nil, err
+	}
 	if err = validateLogPreferences(c.Logs); err != nil {
 		return nil, err
 	}
@@ -303,6 +307,24 @@ refresh_interval: 2s
 # editor: "code --wait" # default: $EDITOR, then $VISUAL, then vi
 # shell: "/bin/sh" # command inside the selected running container
 # download_dir: "~/Downloads/kqt" # default: current directory
+
+# Debugging has no default image. Uncomment and set an approved private image.
+# debug:
+#   default_profile: tools
+#   start_timeout: 90s
+#   profiles:
+#     tools:
+#       image: 123456789012.dkr.ecr.eu-west-2.amazonaws.com/platform/debug-tools:approved
+#       command: ["/bin/sh"]
+#       image_pull_policy: IfNotPresent
+#       security_context:
+#         runAsUser: 1000
+#         runAsGroup: 1000
+#   context_profiles:
+#     production: tools # actual kubeconfig context, not its display alias
+#   namespace_profiles:
+#     production:
+#       payments: tools
 
 logs:
   # since: 10m # omit for all available history within the line limit

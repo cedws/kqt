@@ -88,6 +88,9 @@ func (m *model) openAccess(arg string) tea.Cmd {
 			add("logs", "get", "log", r, name)
 			add("shell (WebSocket)", "get", "exec", r, name)
 			add("shell (SPDY)", "create", "exec", r, name)
+			add("debug (add ephemeral container)", "patch", "ephemeralcontainers", r, name)
+			add("debug attach (WebSocket)", "get", "attach", r, name)
+			add("debug attach (SPDY / WebSocket create check)", "create", "attach", r, name)
 			add("forward (WebSocket)", "get", "portforward", r, name)
 			add("forward (SPDY)", "create", "portforward", r, name)
 		}

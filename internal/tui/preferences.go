@@ -98,6 +98,9 @@ func (s *Settings) savePatch(patch map[string]any) error {
 	if err = validateLogPreferences(check.Logs); err != nil {
 		return err
 	}
+	if err = validateDebugConfig(check.Debug); err != nil {
+		return err
+	}
 	if err = os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}

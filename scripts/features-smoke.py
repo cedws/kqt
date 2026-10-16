@@ -33,6 +33,16 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
     root=Path(temporary)
     config=root/'config.yaml'
     config.write_text('version: 1\ntheme: catppuccin-mocha\nlayout: classic\n')
+    if args.feature=='debug':
+        assert not args.kubeconfig, 'debug PTY workflow uses only the simulated backend'
+        config.write_text(config.read_text()+'''debug:
+  default_profile: approved
+  profiles:
+    approved:
+      image: registry.kqt.invalid/debug:approved
+      security_context:
+        runAsUser: 1000
+''')
     master,slave=os.openpty()
     width,height=120,32
     fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',height,width,0,0))
@@ -65,7 +75,42 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
         raise AssertionError(value+' not on screen:\n'+current)
     try:
         expect('pods [5]' if args.kubeconfig else 'pods [12]')
-        if args.feature=='command-history':
+        if args.feature=='debug-setup':
+            assert not args.kubeconfig, 'debug setup uses only the simulated backend'
+            before=config.read_text()
+            send('B'); expect('Debug image · first use'); expect('Use my own image'); expect('Use BusyBox')
+            send('\x1b'); expect('pods [12]')
+            assert config.read_text()==before, 'cancelled image choice was saved'
+            send(':debug\r'); expect('Debug image · first use'); send('\r'); expect('Which image should kqt use')
+            send('busybox\r'); expect('fully qualified')
+            assert config.read_text()==before, 'invalid image was saved'
+            image='123456789012.dkr.ecr.eu-west-2.amazonaws.com/platform/debug-tools:approved'
+            send('\x01\x0b'+image+'\r'); expect('Start debug container'); expect('Enter to start')
+            text=config.read_text()
+            assert image in text and 'default_profile: default' in text, 'debug image was not saved'
+            assert 'command_history' not in text, 'setup prematurely saved the debug command'
+            send('\x1b'); send('B'); expect('Start debug container')
+            assert 'Which image should kqt use' not in screen(raw,width,height,resize_events), 'saved image was not reused'
+            send('\x1b')
+        elif args.feature=='debug':
+            send(':debug typo\r'); expect('Unknown debug profile')
+            assert 'debug typo' not in config.read_text(), 'unknown debug profile entered history'
+            send('B'); expect('Start debug container'); expect('Container: web')
+            assert 'Confirm:' not in screen(raw,width,height,resize_events), 'pod name entry still required'
+            send('c'); expect('<pod network>'); send('\x1b'); expect('Start debug container')
+            send('d'); expect('runAsNonRoot'); send('d'); expect('Enter to start')
+            send('\x1b'); expect('pods [12]')
+            assert 'ephemeralContainers:' not in config.read_text(), 'cancel persisted debug state'
+            send(':debug approved\r'); expect('Start debug container')
+            expect('registry.kqt.invalid/debug:approved')
+            send('\r'); expect('Demo debug terminal')
+            send('\x1d'); expect('Disconnected; container may keep running')
+            assert 'debug approved' in config.read_text(), 'successful debug command not saved'
+            send(':debug attach\r'); expect('Demo debug terminal')
+            send('exit\r'); expect('Debug session ended')
+            send(':debug attach\r'); expect('Debug container failed'); expect('terminated')
+            send('\x1b'); expect('pods [12]')
+        elif args.feature=='command-history':
             send(':theme nord\r'); send(':theme dracula\r')
             for value, error in [('themse','unknown resource'),('theme missing','Unknown theme'),('logs typo','Use :logs'),('pods typo','do not take arguments')]:
                 send(':'+value+'\r'); expect(error)

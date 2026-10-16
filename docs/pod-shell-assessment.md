@@ -5,6 +5,10 @@ qualified on 2026-10-13. `s` now opens a selected running container's shell, and
 `S` reverses sorting. See [verification](verification.md) for tested behavior
 and remaining qualification limits.
 
+For the separately configured, explicitly confirmed **B** action added later,
+see [ephemeral debug containers](debug-containers.md). The existing shell action
+does not automatically inject a debugger when exec fails.
+
 ## What k9s actually does
 
 Inspected the public source at commit

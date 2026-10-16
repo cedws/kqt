@@ -73,6 +73,7 @@ jobs:
           mkdir -p "$directory/internal/tui/licenses" "$directory/docs/screenshots"
           go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "$directory/kqt" ./cmd/kqt
           cp README.md "$directory/README.md"
+          cp docs/*.md "$directory/docs/"
           cp internal/tui/THEMES.md "$directory/internal/tui/THEMES.md"
           cp internal/tui/licenses/*.txt "$directory/internal/tui/licenses/"
           cp docs/screenshots/*.png "$directory/docs/screenshots/"

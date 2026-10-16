@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -109,6 +110,10 @@ func (r shellInput) Read(p []byte) (int, error) {
 type shellCommand struct {
 	ctx                context.Context
 	executor           kube.PodExecutor
+	attacher           kube.EphemeralDebugger
+	spdyOnly           bool
+	disconnected       bool
+	outputSeen         atomic.Bool
 	target             unstructured.Unstructured
 	container, heading string
 	disconnectHint     string
@@ -171,8 +176,15 @@ func (c *shellCommand) Run() error {
 			}
 		}
 	}()
-	err = c.executor.Exec(ctx, c.target, c.container, c.command, remotecommand.StreamOptions{Stdin: input, Stdout: c.out, Stderr: c.errOut, Tty: true, TerminalSizeQueue: queue})
+	options := remotecommand.StreamOptions{Stdin: input, Stdout: c.out, Stderr: c.errOut, Tty: true, TerminalSizeQueue: queue}
+	if c.attacher != nil {
+		options.Stdout = &debugOutput{Writer: c.out, seen: &c.outputSeen}
+		err = c.attacher.Attach(ctx, c.target, c.container, c.spdyOnly, options)
+	} else {
+		err = c.executor.Exec(ctx, c.target, c.container, c.command, options)
+	}
 	intentionalDisconnect := ctx.Err() != nil && c.ctx.Err() == nil
+	c.disconnected = intentionalDisconnect
 	cancel()
 	reader.Cancel()
 	inputErr := <-inputDone
@@ -186,6 +198,19 @@ func (c *shellCommand) Run() error {
 		return nil
 	}
 	return err
+}
+
+type debugOutput struct {
+	io.Writer
+	seen *atomic.Bool
+}
+
+func (w *debugOutput) Write(p []byte) (int, error) {
+	n, err := w.Writer.Write(p)
+	if n > 0 {
+		w.seen.Store(true)
+	}
+	return n, err
 }
 
 type shellClosedMsg struct {
