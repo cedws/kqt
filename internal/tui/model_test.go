@@ -210,7 +210,7 @@ func TestConfigValidationAndCustomThemes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(s.Themes) != 27 {
+	if len(s.Themes) != 34 {
 		t.Fatalf("theme count %d", len(s.Themes))
 	}
 	os.Mkdir(filepath.Join(dir, "themes"), 0700)

@@ -436,9 +436,11 @@ JSON Pointer columns such as `/spec/replicas` and
 `/metadata/labels/app.kubernetes.io~1name` are supported. Numeric fields sort
 numerically; age uses creation time.
 
-kqt bundles 27 themes, including Ayu and Everforest. Ayu includes `ayu-dark`,
-`ayu-mirage`, and `ayu-light`. Everforest
-includes `everforest-dark-hard`, `everforest-dark-medium`, `everforest-dark-soft`,
+kqt bundles 34 themes, including `material`, `palenight`, `dracula`, `darcula`,
+`monokai`, `ubuntu`, `lemonade`, and `pink-lemonade`. The VS Code references are
+Radu Matei's Ubuntu Color Theme, Denner's Lemonade, and Casseopeian's light pink
+Pink Lemonade. Ayu includes `ayu-dark`, `ayu-mirage`, and `ayu-light`.
+Everforest includes `everforest-dark-hard`, `everforest-dark-medium`, `everforest-dark-soft`,
 and the matching `everforest-light-*` variants. Use `:themes` to preview them or
 set one directly, for example `:theme ayu-mirage` or
 `:theme everforest-dark-medium`. `kqt themes` lists them. `--theme`

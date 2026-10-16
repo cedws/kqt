@@ -504,6 +504,32 @@ Unicode, redaction, exports and terminal sizing with this layout.
 Finalizers use the same two-space indentation and highlighted names in compact
 YAML-style list rows, preserving their API order.
 
+## Additional theme palettes (2026-10-15)
+
+Material, Palenight, Darcula, Monokai, Ubuntu, Lemonade, and Pink Lemonade bring
+the bundled count to 34; Dracula was already included. Ubuntu follows Radu
+Matei's Ubuntu Color Theme, Lemonade follows Denner's theme, and Pink Lemonade
+follows Casseopeian's light pink theme. Attribution records pinned upstream
+sources, retained license notices, and Pink Lemonade's unspecified license.
+
+Qualification used an isolated copy of HEAD plus the theme changes because
+unrelated Kubernetes/logging edits were in progress in the shared checkout.
+The build, full race tests, static checks, and ten Python checks passed there.
+Existing YAML/JSON/log highlighting and shortcut geometry checks cover all 34
+palettes. Foreground, muted, accent, and status colours for all eight requested
+themes meet 4.5:1 against both main and panel backgrounds; selected-row
+foreground also meets 4.5:1 against the selection background.
+
+A 120x40 true-colour demo terminal verified all eight requested names in the
+offline list and command completion, cancelled previews without saving,
+accepted selections and saved preferences, YAML/JSON key colours, metadata
+views, and terminal restoration on exit.
+
+The existing three-layout demo suite also passed at 80x24, 180x48, and 80x40,
+including saved-view/layout restarts and stable refreshes. After the concurrent
+edits progressed, the shared checkout also built successfully with all 34
+themes. Final Palenight selection compositing passed the focused theme checks.
+
 ## Log filtering and history controls (2026-10-15)
 
 The log filter accepts literal includes/excludes, Go regular expressions,
