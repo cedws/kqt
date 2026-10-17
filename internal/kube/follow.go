@@ -248,10 +248,16 @@ func followSource(ctx context.Context, b Backend, stream LogStreamer, source log
 			// A reconnect requests the last timestamp inclusively. Skip only the lines
 			// already delivered at that timestamp, preserving distinct equal-time lines.
 			skip, checkpoint := repeats, last
-			scanner := bufio.NewScanner(reader)
-			scanner.Buffer(make([]byte, 4096), 1024*1024)
-			for scanner.Scan() {
-				line := scanner.Text()
+			buffer := bufio.NewReader(reader)
+			for {
+				line, truncated, readErr := readLogLine(buffer)
+				if readErr != nil && line == "" {
+					err = readErr
+					break
+				}
+				if truncated {
+					line += " … line truncated (1 MiB)"
+				}
 				stamp, parseErr := time.Parse(time.RFC3339Nano, strings.SplitN(line, " ", 2)[0])
 				if parseErr == nil {
 					if checkpoint != nil && (stamp.Before(*checkpoint) || stamp.Equal(*checkpoint) && skip > 0) {
@@ -270,8 +276,14 @@ func followSource(ctx context.Context, b Backend, stream LogStreamer, source log
 				}
 				previousError = ""
 				emit(source.prefix() + line)
+				if readErr != nil {
+					err = readErr
+					break
+				}
 			}
-			err = scanner.Err()
+			if err == io.EOF {
+				err = nil
+			}
 			reader.Close()
 		}
 		if ctx.Err() != nil {
