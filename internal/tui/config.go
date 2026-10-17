@@ -237,6 +237,12 @@ func cloneViews(values map[string]viewConfig) map[string]viewConfig {
 }
 func resolveLayouts(custom map[string]layoutProfile) (map[string]layoutProfile, error) {
 	result := map[string]layoutProfile{"classic": {Inspector: "none", InspectorPercent: 38}, "inspector": {Inspector: "right", InspectorPercent: 38}, "bottom": {Inspector: "bottom", InspectorPercent: 38}}
+	// Validate reserved names before the cache also contains custom parents.
+	for name := range custom {
+		if _, ok := result[name]; ok {
+			return nil, fmt.Errorf("built-in layout %s cannot be replaced", name)
+		}
+	}
 	visiting := map[string]bool{}
 	var resolve func(string) (layoutProfile, error)
 	resolve = func(name string) (layoutProfile, error) {
@@ -285,9 +291,6 @@ func resolveLayouts(custom map[string]layoutProfile) (map[string]layoutProfile, 
 		return base, nil
 	}
 	for name := range custom {
-		if _, ok := result[name]; ok {
-			return nil, fmt.Errorf("built-in layout %s cannot be replaced", name)
-		}
 		if _, err := resolve(name); err != nil {
 			return nil, err
 		}
