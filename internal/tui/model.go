@@ -768,9 +768,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.route.selection = ""
 			m.rows = make([]unstructured.Unstructured, len(v.rows))
 			for i, o := range v.rows {
-				if m.secretObject != nil && o.GetKind() == "Secret" && kube.Identity(o) == m.secretTarget {
-					m.secretObject = o.DeepCopy()
-				}
+				m.hideChangedSecret(o)
 				m.rows[i] = kube.Redacted(o)
 			}
 			m.dataErr = ""

@@ -26,6 +26,23 @@ func (m *model) clearSecret() {
 	m.secretObject = nil
 }
 
+func (m *model) hideChangedSecret(o unstructured.Unstructured) {
+	if m.secretTarget == "" || o.GetKind() != "Secret" || kube.Identity(o) != m.secretTarget {
+		return
+	}
+	previous := m.secretObject
+	if previous == nil {
+		// A refresh can arrive while the explicit reveal request is pending.
+		if selected, ok := m.current(); ok && kube.Identity(selected) == m.secretTarget {
+			previous = &selected
+		}
+	}
+	if previous != nil && o.GetResourceVersion() != previous.GetResourceVersion() {
+		m.clearSecret()
+		m.notice = "Secret changed; values hidden. Press x to reveal again"
+	}
+}
+
 func (m *model) manifest(o unstructured.Unstructured, asJSON bool) string {
 	if o.GetKind() == "Secret" && m.secretObject != nil && kube.Identity(o) == m.secretTarget {
 		return kube.DecodedSecretManifest(*m.secretObject, asJSON)

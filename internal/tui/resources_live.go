@@ -130,10 +130,7 @@ func (m *model) resourceBatch(v resourceBatchMsg) tea.Cmd {
 		}
 		if update.Type != "" && update.Type != watch.Bookmark {
 			key := kube.Identity(update.Object)
-			if update.Object.GetKind() == "Secret" && m.secretObject != nil && key == m.secretTarget && update.Object.GetResourceVersion() != m.secretObject.GetResourceVersion() {
-				m.clearSecret()
-				m.notice = "Secret changed; values hidden. Press x to reveal again"
-			}
+			m.hideChangedSecret(update.Object)
 			if update.Type == watch.Deleted {
 				delete(cache, key)
 			} else {

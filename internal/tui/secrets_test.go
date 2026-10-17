@@ -14,6 +14,7 @@ import (
 	"github.com/z0mbix/kqt/internal/kube"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/watch"
 )
 
 type secretReader struct {
@@ -180,22 +181,48 @@ func TestSecretRevealRejectsErrorsReplacementAndLateReplies(t *testing.T) {
 	assertSecretHidden(t, m)
 }
 
-func TestSecretRefreshUpdatesOnlyRevealedObjectAndHidesReplacement(t *testing.T) {
+func TestSecretRefreshPreservesSameVersionAndHidesChangesAndReplacement(t *testing.T) {
 	m := secretModel(t)
 	revealSecret(t, m)
 	m.openDetails(true, false)
 	fresh := *m.secretObject.DeepCopy()
+	m.Update(snapshotMsg{generation: m.generation, request: m.request, rows: []unstructured.Unstructured{fresh}})
+	if m.secretObject == nil || !strings.Contains(m.inspectorContent, "demo-only") {
+		t.Fatal("unchanged refresh hid explicitly revealed values")
+	}
 	fresh.Object["data"].(map[string]interface{})["token"] = base64.StdEncoding.EncodeToString([]byte("updated-value"))
 	fresh.SetResourceVersion("2")
 	m.Update(snapshotMsg{generation: m.generation, request: m.request, rows: []unstructured.Unstructured{fresh}})
-	if !strings.Contains(m.inspectorContent, "updated-value") || !strings.Contains(m.panel.GetContent(), "updated-value") || kube.Text(m.rows[0], "data", "token") != "<redacted>" {
-		t.Fatal("refresh did not update revealed views while keeping the list redacted")
+	assertSecretHidden(t, m)
+	if strings.Contains(m.inspectorContent+m.panel.GetContent(), "updated-value") || kube.Text(m.rows[0], "data", "token") != "<redacted>" {
+		t.Fatal("refresh exposed rotated Secret values")
 	}
+	revealSecret(t, m)
 	fresh.SetUID(types.UID("new-incarnation"))
 	m.Update(snapshotMsg{generation: m.generation, request: m.request, rows: []unstructured.Unstructured{fresh}})
 	assertSecretHidden(t, m)
 	if strings.Contains(m.inspectorContent+m.panel.GetContent(), "updated-value") {
 		t.Fatal("UID replacement retained decoded data")
+	}
+}
+
+func TestChangedSecretCancelsPendingRevealInPollingAndWatch(t *testing.T) {
+	for _, mode := range []string{"polling", "watch"} {
+		t.Run(mode, func(t *testing.T) {
+			m := secretModel(t)
+			pending := pressSecretToggle(m)
+			changed := *m.visible[0].DeepCopy()
+			changed.SetResourceVersion("rotated")
+			if mode == "watch" {
+				feed := testResourceFeed(m)
+				resourceChanges(m, feed, kube.EventUpdate{Type: watch.Modified, Object: changed})
+			} else {
+				m.Update(snapshotMsg{generation: m.generation, request: m.request, rows: []unstructured.Unstructured{changed}})
+			}
+			assertSecretHidden(t, m)
+			m.Update(pending())
+			assertSecretHidden(t, m)
+		})
 	}
 }
 
