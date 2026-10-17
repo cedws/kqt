@@ -12,7 +12,7 @@ kubectl is not required at runtime.
 
 ## Run
 
-Requires Go 1.27.1 or later; mise pins Go 1.27.1 for this repository.
+Requires Go 1.27.2 or later; mise pins Go 1.27.2 for this repository.
 With mise activated in your shell, the repository's mise configuration adds
 `./bin/` to your `PATH` while you work here, so you can run the built binary as
 `kqt`.
