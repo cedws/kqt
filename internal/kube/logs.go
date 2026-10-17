@@ -44,6 +44,15 @@ func SafeLogLines(s string) string {
 // LogSnapshot reads bounded snapshots with four concurrent requests. A workload
 // selector stays in its namespace; errors remain visible alongside healthy pods.
 func LogSnapshot(ctx context.Context, b Backend, target unstructured.Unstructured, container string, previous bool, options ...LogOptions) (string, error) {
+	reader, ok := b.(ResourceGetter)
+	if !ok {
+		return "", fmt.Errorf("individual resource reads are unavailable; cannot verify log target identity")
+	}
+	var err error
+	target, err = checkedLogResource(ctx, reader, target)
+	if err != nil {
+		return "", err
+	}
 	if target.GetKind() == "Pod" && container != "*" {
 		return b.Logs(ctx, target.GetNamespace(), target.GetName(), container, previous, options...)
 	}
@@ -64,7 +73,10 @@ func LogSnapshot(ctx context.Context, b Backend, target unstructured.Unstructure
 		}
 	}
 	slices.SortFunc(pods, func(a, b unstructured.Unstructured) int { return strings.Compare(a.GetName(), b.GetName()) })
-	type source struct{ ns, pod, container string }
+	type source struct {
+		pod       unstructured.Unstructured
+		container string
+	}
 	var sources []source
 	for _, pod := range pods {
 		containers := []string{container}
@@ -72,7 +84,7 @@ func LogSnapshot(ctx context.Context, b Backend, target unstructured.Unstructure
 			containers = Containers(pod)
 		}
 		for _, name := range containers {
-			sources = append(sources, source{pod.GetNamespace(), pod.GetName(), name})
+			sources = append(sources, source{pod, name})
 		}
 	}
 	if len(sources) == 0 {
@@ -89,8 +101,12 @@ func LogSnapshot(ctx context.Context, b Backend, target unstructured.Unstructure
 			defer workers.Done()
 			for index := range jobs {
 				s := sources[index]
-				prefix := fmt.Sprintf("[%s/%s:%s]", s.ns, s.pod, s.container)
-				data, err := b.Logs(ctx, s.ns, s.pod, s.container, previous, options...)
+				prefix := fmt.Sprintf("[%s/%s:%s]", s.pod.GetNamespace(), s.pod.GetName(), s.container)
+				_, err := checkedLogResource(ctx, reader, s.pod)
+				var data string
+				if err == nil {
+					data, err = b.Logs(ctx, s.pod.GetNamespace(), s.pod.GetName(), s.container, previous, options...)
+				}
 				if err != nil {
 					results[index] = prefix + " Unable to read logs: " + err.Error() + "\n"
 					continue
@@ -133,4 +149,21 @@ dispatch:
 		out.WriteString(data)
 	}
 	return out.String(), nil
+}
+
+// Log subresources are addressed by name. Check the captured UID immediately
+// before reading; completed pods remain valid targets for previous snapshots.
+func checkedLogResource(ctx context.Context, reader ResourceGetter, selected unstructured.Unstructured) (unstructured.Unstructured, error) {
+	if selected.GetUID() == "" {
+		return selected, fmt.Errorf("selected resource has no UID; refresh before reading logs")
+	}
+	r, err := Resolve(Builtins(), strings.ToLower(selected.GetKind()))
+	if err != nil {
+		return selected, err
+	}
+	fresh, err := reader.Get(ctx, r, selected.GetNamespace(), selected.GetName())
+	if err == nil && fresh.GetUID() != selected.GetUID() {
+		err = fmt.Errorf("selected %s was replaced; close logs and select it again", selected.GetKind())
+	}
+	return fresh, err
 }
