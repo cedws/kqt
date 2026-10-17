@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode"
 
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/rivo/uniseg"
 )
@@ -352,33 +353,67 @@ func (t theme) highlightLogMatches(styled string, spans []logSpan) string {
 	}
 	plain := ansi.Strip(styled)
 	clusters := uniseg.NewGraphemes(plain)
-	var cells []logSpan
-	column := 0
+	var expanded []logSpan
+	index := 0
 	for clusters.Next() {
 		from, to := clusters.Positions()
-		next := column + ansi.StringWidth(clusters.Str())
-		for _, span := range spans {
-			if from < span.to && to > span.from {
-				if len(cells) > 0 && cells[len(cells)-1].to >= column {
-					cells[len(cells)-1].to = next
-				} else {
-					cells = append(cells, logSpan{column, next})
-				}
-				break
+		for index < len(spans) && spans[index].to <= from {
+			index++
+		}
+		if index < len(spans) && spans[index].from < to {
+			if len(expanded) > 0 && expanded[len(expanded)-1].to == from {
+				expanded[len(expanded)-1].to = to
+			} else {
+				expanded = append(expanded, logSpan{from, to})
 			}
 		}
-		column = next
 	}
-	var out strings.Builder
-	end := 0
+	// Walk both the spans and styled input once. Repeated ansi.Cut calls scan
+	// the entire line per match and freeze the UI on many disjoint matches.
+	var out, match strings.Builder
 	style := t.selectionStyle().Bold(true)
-	for _, span := range cells {
-		out.WriteString(ansi.Cut(styled, end, span.from))
-		// Underline the complete span without inserting escapes inside joined emoji.
-		match := style.Render(ansi.Strip(ansi.Cut(styled, span.from, span.to)))
-		out.WriteString(ansi.NewStyle().Underline(true).Styled(match))
-		end = span.to
+	var pen uv.Style
+	flush := func() {
+		if match.Len() == 0 {
+			return
+		}
+		// Render complete graphemes, including matches across syntax tokens.
+		out.WriteString(ansi.NewStyle().Underline(true).Styled(style.Render(match.String())))
+		out.WriteString(pen.String())
+		match.Reset()
 	}
-	out.WriteString(ansi.Cut(styled, end, column))
+	parser := ansi.GetParser()
+	defer ansi.PutParser(parser)
+	var state byte
+	index, offset := 0, 0
+	for len(styled) > 0 {
+		seq, width, n, next := ansi.DecodeSequence(styled, state, parser)
+		if n == 0 {
+			flush()
+			out.WriteString(styled)
+			break
+		}
+		styled, state = styled[n:], next
+		if width == 0 && ansi.Strip(seq) == "" {
+			if ansi.HasCsiPrefix(seq) && parser.Command() == 'm' {
+				uv.ReadStyle(parser.Params(), &pen)
+			}
+			if match.Len() == 0 {
+				out.WriteString(seq)
+			}
+			continue
+		}
+		for index < len(expanded) && expanded[index].to <= offset {
+			index++
+		}
+		if index < len(expanded) && expanded[index].from < offset+len(seq) {
+			match.WriteString(seq)
+		} else {
+			flush()
+			out.WriteString(seq)
+		}
+		offset += len(seq)
+	}
+	flush()
 	return out.String()
 }

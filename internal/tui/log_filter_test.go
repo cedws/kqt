@@ -1,12 +1,61 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
+
+func TestLogHighlightsManyDisjointMatches(t *testing.T) {
+	line := strings.Repeat("a ", 8192)
+	query, _ := compileLogFilter("include:a")
+	styled := builtThemes()["nord"].highlightLogMatches(line, query.spans(line))
+	if ansi.Strip(styled) != line || strings.Count(styled, "\x1b[4m") != 8192 {
+		t.Fatal("long disjoint matches changed text or lost underlines")
+	}
+}
+
+func TestLogHighlightsRestoreSyntaxAfterAndAcrossMatches(t *testing.T) {
+	base := "\x1b[31mab\x1b[32m cd\x1b[0m tail"
+	render := func(text string) uv.ScreenBuffer {
+		screen := uv.NewScreenBuffer(40, 1)
+		uv.NewStyledString(text).Draw(screen, uv.Rect(0, 0, 40, 1))
+		return screen
+	}
+	original := render(base)
+	for _, value := range []string{"include:b", `re:"b c"`} {
+		query, _ := compileLogFilter(value)
+		highlighted := builtThemes()["nord"].highlightLogMatches(base, query.spans(ansi.Strip(base)))
+		cells := render(highlighted)
+		if ansi.Strip(highlighted) != ansi.Strip(base) {
+			t.Fatal("highlight changed styled text")
+		}
+		for _, i := range []int{0, 4, 5, 6, 7, 8} {
+			if !cells.CellAt(i, 0).Style.Equal(&original.CellAt(i, 0).Style) {
+				t.Fatalf("%s: syntax style leaked at cell %d", value, i)
+			}
+		}
+	}
+}
+
+func BenchmarkLogHighlightDisjointMatches(b *testing.B) {
+	for _, size := range []int{2048, 4096, 8192, 16384} {
+		b.Run(fmt.Sprint(size), func(b *testing.B) {
+			line := strings.Repeat("a ", size/2)
+			query, _ := compileLogFilter("include:a")
+			spans, palette := query.spans(line), builtThemes()["nord"]
+			b.SetBytes(int64(size))
+			b.ResetTimer()
+			for b.Loop() {
+				palette.highlightLogMatches(line, spans)
+			}
+		})
+	}
+}
 
 func TestLogQueriesSupportMixedFormatsAndExactJSONValues(t *testing.T) {
 	jsonLine := `[apps/web-0003:web] 2026-10-15T12:00:00Z {"level":"warning","message":"no ERROR occurred","request_id":"abc","http":{"status":500},"id":18446744073709551615,"ready":false,"empty":"","nil":null}`
