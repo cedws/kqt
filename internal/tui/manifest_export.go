@@ -69,7 +69,7 @@ func (m *model) promptManifestExport() tea.Cmd {
 		m.notice = kube.Safe(err.Error())
 		return nil
 	}
-	path, err := downloadPath(m.settings.Config.DownloadDir, o.GetName()+"."+format)
+	path, err := downloadPath(m.settings.Config.DownloadDir, o.GetName()+"-"+strings.ToLower(o.GetKind())+"."+format)
 	if err != nil {
 		m.notice = "Unable to prepare download: " + kube.Safe(err.Error())
 		return nil

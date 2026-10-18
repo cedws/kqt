@@ -249,8 +249,12 @@ func (m *model) logsInput(mode string) tea.Cmd {
 		m.input.CharLimit = 4096
 	}
 	if mode == "log-save" {
+		container := m.logContainer
+		if container == "*" {
+			container = "all-containers"
+		}
 		var err error
-		value, err = downloadPath(m.settings.Config.DownloadDir, "kqt-logs.log")
+		value, err = downloadPath(m.settings.Config.DownloadDir, m.logObject.GetName()+"-"+container+".log")
 		if err != nil {
 			m.notice = "Unable to prepare download: " + kube.Safe(err.Error())
 			return nil

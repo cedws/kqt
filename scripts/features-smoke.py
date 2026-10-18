@@ -276,14 +276,15 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
             assert data['kind']=='Pod'
             name=data['metadata']['name']
             assert directory.stat().st_mode & 0o777==0o700, 'download directory is not private'
-            send('y'); expect('YAML'); send('o'); expect(name+'.yaml')
+            manifest=name+'-pod.yaml'
+            send('y'); expect('YAML'); send('o'); expect(manifest)
             for width in [80,120]:
                 resize_events.append((len(raw),width,height))
                 fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',height,width,0,0))
                 os.killpg(process.pid,signal.SIGWINCH); pump(0.2)
-                expect(name+'.yaml')
+                expect(manifest)
             send('\r'); expect('Manifest saved to')
-            assert 'kind: Pod' in (directory/(name+'.yaml')).read_text(), 'default manifest prompt saved to the wrong location'
+            assert 'kind: Pod' in (directory/manifest).read_text(), 'default manifest prompt saved to the wrong location'
             send('\x1b')
             send('M'); expect('Labels (')
             for tab, filename, text in [('2','kqt-labels.txt','Labels'),('3','kqt-annotations.txt','Annotations'),('4','kqt-finalizers.txt','Finalizers'),('1','kqt-events.log','Containers')]:
@@ -292,8 +293,9 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
                 assert text in (directory/filename).read_text(), 'active resource tab used the wrong directory'
             send('\x1b')
             send('L'); expect('Containers'); send('\r'); expect('live heartbeat')
-            send(' '); send('o'); expect('kqt-logs.log'); send('\r'); expect('Logs saved to')
-            assert 'live heartbeat' in (directory/'kqt-logs.log').read_text(), 'logs ignored the download directory'
+            filename=name+'-web.log'
+            send(' '); send('o'); expect(filename); send('\r'); expect('Logs saved to')
+            assert 'live heartbeat' in (directory/filename).read_text(), 'logs ignored the download directory'
             send('\x1b')
             status=(directory/'kqt-events.log').read_bytes()
             send(':events\r'); expect('events ['); send('o'); send('\r'); expect('Unable to save events')

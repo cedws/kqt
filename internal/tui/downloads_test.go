@@ -129,7 +129,7 @@ func TestAllSavePromptsAndManifestCommandUseDownloadDirectory(t *testing.T) {
 	m.openDetails(false, true)
 	o, _ := m.current()
 	m.promptManifestExport()
-	manifest := filepath.Join(directory, o.GetName()+".json")
+	manifest := filepath.Join(directory, o.GetName()+"-pod.json")
 	if m.input.Value() != manifest {
 		t.Fatal("manifest prompt ignored the directory")
 	}
@@ -139,14 +139,22 @@ func TestAllSavePromptsAndManifestCommandUseDownloadDirectory(t *testing.T) {
 	m.Update(m.manifestCommand("yaml clean nested/reusable.yaml", false)())
 	assertPrivateDownload(t, filepath.Join(directory, "nested", "reusable.yaml"), "kind: Pod")
 
-	m.mode = "logs"
-	m.logLines = []string{"download log marker"}
-	m.logsInput("log-save")
-	if m.input.Value() != filepath.Join(directory, "kqt-logs.log") {
-		t.Fatal("logs prompt ignored the directory")
+	m.logObject = o
+	for _, tc := range []struct{ container, suffix string }{
+		{"web", "web"},
+		{"*", "all-containers"},
+	} {
+		m.mode = "logs"
+		m.logContainer = tc.container
+		m.logLines = []string{"download log marker"}
+		m.logsInput("log-save")
+		logs := filepath.Join(directory, o.GetName()+"-"+tc.suffix+".log")
+		if m.input.Value() != logs {
+			t.Fatalf("wrong logs path for container %q: %s", tc.container, m.input.Value())
+		}
+		m.Update(m.logsInputKey(tea.KeyPressMsg{Code: tea.KeyEnter})())
+		assertPrivateDownload(t, logs, "download log marker")
 	}
-	m.Update(m.logsInputKey(tea.KeyPressMsg{Code: tea.KeyEnter})())
-	assertPrivateDownload(t, filepath.Join(directory, "kqt-logs.log"), "download log marker")
 	m.mode = ""
 	m.Update(m.openEvents()())
 	for _, tc := range []struct{ key, filename, text string }{
