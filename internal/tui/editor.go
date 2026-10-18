@@ -126,7 +126,7 @@ func newEditBuffer(original unstructured.Unstructured, r kube.Resource, b kube.E
 		return nil, err
 	}
 	path := filepath.Join(directory, "resource.yaml")
-	data = append([]byte("# Edit and save to apply changes. Exit without changes to cancel.\n# Keep apiVersion, kind, name, namespace, UID and resourceVersion unchanged.\n# Status and managedFields are server-managed and are omitted.\n"), data...)
+	data = append([]byte("# Edit and save to review changes in kqt before applying. Exit without changes to cancel.\n# Keep apiVersion, kind, name, namespace, UID and resourceVersion unchanged.\n# Status and managedFields are server-managed and are omitted.\n"), data...)
 	if err = os.WriteFile(path, data, 0600); err != nil {
 		os.RemoveAll(directory)
 		return nil, err
@@ -134,62 +134,62 @@ func newEditBuffer(original unstructured.Unstructured, r kube.Resource, b kube.E
 	return &editBuffer{directory, path, original, editable, r, b}, nil
 }
 func (b *editBuffer) remove() { os.RemoveAll(b.directory) }
-func (b *editBuffer) apply(ctx context.Context) (bool, error) {
+func (b *editBuffer) prepare() (*editReview, error) {
 	data, err := os.ReadFile(b.path)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	if len(data) > 1024*1024 {
-		return false, fmt.Errorf("edited resource exceeds 1 MiB")
+		return nil, fmt.Errorf("edited resource exceeds 1 MiB")
 	}
 	documents := yamlv3.NewDecoder(bytes.NewReader(data))
 	var document yamlv3.Node
 	if err = documents.Decode(&document); err != nil {
-		return false, fmt.Errorf("invalid YAML: %w", err)
+		return nil, fmt.Errorf("invalid YAML: %w", err)
 	}
 	var extra yamlv3.Node
 	if err = documents.Decode(&extra); err != io.EOF {
-		return false, fmt.Errorf("edit must contain one YAML document")
+		return nil, fmt.Errorf("edit must contain one YAML document")
 	}
 	jsonData, err := yaml.YAMLToJSONStrict(data)
 	if err != nil {
-		return false, fmt.Errorf("invalid YAML: %w", err)
+		return nil, fmt.Errorf("invalid YAML: %w", err)
 	}
 	var object map[string]any
 	decoder := json.NewDecoder(bytes.NewReader(jsonData))
 	decoder.UseNumber()
 	if err = decoder.Decode(&object); err != nil {
-		return false, err
+		return nil, err
 	}
 	edited := unstructured.Unstructured{Object: object}
 	original := b.original
 	if edited.GetAPIVersion() != original.GetAPIVersion() || edited.GetKind() != original.GetKind() || edited.GetName() != original.GetName() || edited.GetNamespace() != original.GetNamespace() || edited.GetUID() != original.GetUID() || edited.GetResourceVersion() != original.GetResourceVersion() {
-		return false, fmt.Errorf("resource identity and resourceVersion must not change")
+		return nil, fmt.Errorf("resource identity and resourceVersion must not change")
 	}
 	if _, ok := object["status"]; ok {
-		return false, fmt.Errorf("status is server-managed")
+		return nil, fmt.Errorf("status is server-managed")
 	}
 	if _, present, _ := unstructured.NestedFieldNoCopy(object, "metadata", "managedFields"); present {
-		return false, fmt.Errorf("managedFields is server-managed")
+		return nil, fmt.Errorf("managedFields is server-managed")
 	}
 	before, err := json.Marshal(b.editable.Object)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	after, err := json.Marshal(edited.Object)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	patch, err := jsonpatch.CreateMergePatch(before, after)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	if bytes.Equal(patch, []byte("{}")) {
-		return false, nil
+		return nil, nil
 	}
 	var values map[string]any
 	if err = json.Unmarshal(patch, &values); err != nil {
-		return false, err
+		return nil, err
 	}
 	metadata, ok := values["metadata"].(map[string]any)
 	if !ok {
@@ -200,11 +200,25 @@ func (b *editBuffer) apply(ctx context.Context) (bool, error) {
 	values["metadata"] = metadata
 	patch, err = json.Marshal(values)
 	if err != nil {
+		return nil, err
+	}
+	return &editReview{patch: patch, before: b.editable, after: edited}, nil
+}
+
+func (b *editBuffer) apply(ctx context.Context) (bool, error) {
+	review, err := b.prepare()
+	if err != nil || review == nil {
 		return false, err
 	}
-	return true, b.backend.Patch(ctx, b.resource, original.GetNamespace(), original.GetName(), patch)
+	return true, b.applyReview(ctx, review)
 }
+func (b *editBuffer) applyReview(ctx context.Context, review *editReview) error {
+	return b.backend.Patch(ctx, b.resource, b.original.GetNamespace(), b.original.GetName(), review.patch)
+}
+
 func (m *model) cancelEdit() {
+	m.forgetHistoryExecution("edit")
+	m.editReview = nil
 	m.editToken++
 	if m.editCancel != nil {
 		m.editCancel()
@@ -277,7 +291,7 @@ func (m *model) editorReady(v editReadyMsg) tea.Cmd {
 		return m.refreshResources()
 	}
 	m.mode = "editing"
-	m.notice = "Editor open · changes apply on successful exit"
+	m.notice = "Editor open · changes will be reviewed before applying"
 	process := exec.CommandContext(m.session.ctx, args[0], append(args[1:], buffer.path)...)
 	return tea.ExecProcess(process, func(err error) tea.Msg { return editorClosedMsg{v.generation, v.token, buffer, err} })
 }
@@ -290,13 +304,16 @@ func (m *model) editorClosed(v editorClosedMsg) tea.Cmd {
 		return m.refreshResources()
 	}
 	m.mode = "edit-loading"
-	m.notice = "Applying edited resource…"
+	m.notice = "Preparing edit review…"
 	ctx, cancel := context.WithTimeout(m.session.ctx, 15*time.Second)
 	m.editCancel = cancel
 	return func() tea.Msg {
 		defer cancel()
-		changed, err := v.buffer.apply(ctx)
-		return editedMsg{v.generation, v.token, v.buffer, changed, err}
+		review, err := v.buffer.prepare()
+		if err == nil && ctx.Err() != nil {
+			err = ctx.Err()
+		}
+		return editReviewedMsg{v.generation, v.token, v.buffer, review, err}
 	}
 }
 func (m *model) editFinished(v editedMsg) tea.Cmd {
@@ -305,6 +322,7 @@ func (m *model) editFinished(v editedMsg) tea.Cmd {
 	}
 	m.mode = ""
 	m.editBuffer = nil
+	m.editReview = nil
 	if v.err != nil {
 		m.editFailure("Edit failed: "+kube.Safe(v.err.Error()), v.buffer.path)
 	} else {

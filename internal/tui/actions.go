@@ -55,6 +55,16 @@ func (m *model) confirmAction(plan kube.ActionPlan) tea.Cmd {
 	m.cancelAction()
 	m.actionPlan = &plan
 	m.mode = "action-confirm"
+	if plan.Action == "delete" {
+		m.mode, m.deleteYes = "delete-confirm", false
+		m.input.Blur()
+		m.resize()
+		m.panelTitle = "Delete " + plan.Object.GetKind() + "?"
+		m.panel.SoftWrap = true
+		m.panel.GotoTop()
+		m.panel.SetContent(fmt.Sprintf("Context: %s\n%s\n\nDelete this %s?", kube.Safe(m.contextName), kube.Safe(actionIdentity(&plan)), plan.Object.GetKind()))
+		return nil
+	}
 	m.resize()
 	m.panelTitle = "Confirm " + plan.Action
 	m.panel.SoftWrap = true
@@ -93,21 +103,52 @@ func (m *model) actionInputKey(v tea.KeyPressMsg) tea.Cmd {
 			m.renderActionConfirmation(m.notice)
 			return nil
 		}
-		m.input.Blur()
-		m.mode = "action-running"
-		m.panel.SetContent("Applying " + plan.Action + " to " + kube.Safe(actionIdentity(plan)) + "…")
-		ctx, cancel := context.WithTimeout(m.session.ctx, 15*time.Second)
-		m.actionCancel = cancel
-		g, token, b, captured := m.generation, m.actionToken, m.backend, *plan
-		return func() tea.Msg {
-			defer cancel()
-			message, err := kube.ApplyAction(ctx, b, captured)
-			return actionResultMsg{g, token, message, err}
-		}
+		return m.applyConfirmedAction()
 	}
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(v)
 	return cmd
+}
+
+func (m *model) applyConfirmedAction() tea.Cmd {
+	if !m.allowMutation("workload actions") || m.actionPlan == nil {
+		return nil
+	}
+	plan := m.actionPlan
+	m.input.Blur()
+	m.mode = "action-running"
+	m.resize()
+	m.panel.SetContent("Applying " + plan.Action + " to " + kube.Safe(actionIdentity(plan)) + "…")
+	ctx, cancel := context.WithTimeout(m.session.ctx, 15*time.Second)
+	m.actionCancel = cancel
+	g, token, b, captured := m.generation, m.actionToken, m.backend, *plan
+	return func() tea.Msg {
+		defer cancel()
+		message, err := kube.ApplyAction(ctx, b, captured)
+		return actionResultMsg{g, token, message, err}
+	}
+}
+
+func (m *model) deleteKey(v tea.KeyPressMsg) tea.Cmd {
+	switch v.String() {
+	case "left", "right", "tab", "shift+tab":
+		m.deleteYes = !m.deleteYes
+	case "y", "Y":
+		return m.applyConfirmedAction()
+	case "enter":
+		if m.deleteYes {
+			return m.applyConfirmedAction()
+		}
+		fallthrough
+	case "esc", "q", "n", "N":
+		m.cancelAction()
+		m.mode = ""
+		m.resize()
+		m.notice = "Deletion cancelled"
+	default:
+		scroll(&m.panel, v.String())
+	}
+	return nil
 }
 func (m *model) actionResult(v actionResultMsg) tea.Cmd {
 	if v.generation != m.generation || v.token != m.actionToken || m.mode != "action-running" {
@@ -115,6 +156,7 @@ func (m *model) actionResult(v actionResultMsg) tea.Cmd {
 	}
 	m.cancelAction()
 	m.mode = ""
+	m.resize()
 	if v.err != nil {
 		m.notice = "Action failed: " + kube.Safe(v.err.Error())
 	} else {

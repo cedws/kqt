@@ -670,3 +670,114 @@ This is a contrast-qualified, simulation-screened first pass. A user study has
 not been performed. Individual colour vision, fonts, displays, and custom
 terminal palettes remain user-validation needs; `no-color` inherits terminal
 defaults and its contrast is controlled by the terminal configuration.
+
+
+## Resource diagnostics, edit review, bundles and deletion
+
+`just check` passes the full race/static suite and all ten Python checks.
+Backend/model coverage includes namespace/selector scoping, EndpointSlice address
+and port deduplication, missing named ports and stale UIDs, taint/toleration
+matching, scheduler events, unavailable node/event/PVC reads, and cancelled or
+obsolete diagnostic results. A user who can list but cannot GET a selected
+resource receives an unavailable report rather than an indefinite loading state.
+
+Edit tests verify that saving in the editor performs no mutation, that Enter
+applies the frozen reviewed patch even if the temporary file later changes,
+that Escape discards it, that Secret values stay hidden, and that version
+conflicts retain the edited file. Deletion tests cover default No, Yes through
+keyboard and mouse, shared centring/button geometry at 40x12, 80x24 and 180x48,
+and successful-command history. Existing backend deletion preconditions remain
+covered by the action tests.
+
+Bundle tests check Secret reads are prevented, known secret-bearing manifest
+fields are redacted, logs require opt-in, archives have fixed flat paths and
+private entry modes, destinations use mode 0600, existing files are preserved,
+and cancellation or resource replacement prevents export. Partial RBAC failures
+remain visible in capture notes. The archive is not a complete secret scrubber;
+optional logs and arbitrary application fields require review before sharing.
+
+Native terminals passed the classic/inspector/bottom layout and restart suite
+at 80x24, 180x48 and 80x40, including editor handoff and applying the new review.
+The operator suite and all sixteen feature scenarios passed. The new diagnostics
+scenario exercises Pod and Service tabs, plain-text report export, configured
+bundle destinations, archive contents/permissions, explicit log inclusion,
+cancellation, and Secret exclusion. The actions scenario verifies the compact
+centred deletion dialog and default-No cancellation. CI and `just smoke` run
+these scenarios.
+
+`mise exec -- sh scripts/live-smoke.sh --diagnostics-only` passed against a newly
+created disposable k3d Kubernetes cluster, which was then removed. It checked a
+Service's real EndpointSlice and named target port, scheduling with a Pod-only
+reader lacking event/node permissions, partial bundle collection under that
+identity, and a deliberately unschedulable Pod with a real FailedScheduling
+event and node-selector mismatch. These are read-only diagnostic observations;
+connectivity probing and a complete scheduler simulation are outside this scope.
+
+
+## Fuzzy help search
+
+The `?` and `:help` view supports `/` for live fuzzy filtering across shortcut
+keys, descriptions, section headings and notes. Results use the existing
+case-insensitive subsequence scorer, keep related entries grouped and preserve
+semantic shortcut colours. Enter retains the filter for scrolling; Escape during
+search restores the previous query and scroll position. Reopening help resets it.
+Pasted queries update results immediately. Empty results show recovery guidance.
+Help search does not modify the resource filter, selection, scope or history.
+
+The full race/static suite and ten Python checks passed. Focused checks cover
+matching, paste, cancellation, retained empty results, theme changes, scrolling
+and terminal dimensions. The `--feature help` terminal scenario passed at 40x12,
+80x24 and 180x48, including bracketed paste, cancellation, clearing and reopening
+through `:help`. Existing operator terminal workflows passed. The new scenario
+is included in `just smoke` and CI.
+
+
+## Help notes pane
+
+The explanatory help text is separated from the shortcut list and displayed in a
+right-hand Notes pane at 80 columns and above. The notes use paragraph wrapping
+and section headings. Both panes scroll independently: Tab selects the keyboard
+pane, clicks focus a pane, and the wheel scrolls the pane under the pointer.
+Below 80 columns, Tab switches between the two full-width panes. Fuzzy search
+still covers both; a match found only in Notes focuses that pane automatically.
+Cancelling a search restores both scroll positions and the prior pane focus.
+
+Terminal checks passed at 40x12, 80x24, 120x32 and 180x48, including side-by-side
+placement, note scrolling, the narrow-screen fallback, search and bracketed paste.
+The 120-column rendering was inspected. Existing operator terminal workflows
+passed. Model checks cover responsive geometry, independent keyboard/mouse
+scrolling, focus restoration on cancel/resize, and selection that excludes the
+divider and adjacent pane. Existing modal selection coverage now accounts for the
+help pane heading row.
+
+
+## Inspector visibility and placement controls
+
+`i` toggles the inspector off/on without changing its preferred placement, active
+layout, columns, sort or percentage. `I` (Shift+i), or `:inspector`, opens a
+right/bottom chooser. Direct position and on/off/toggle commands are supported;
+`none` remains an alias for off. The preferred position and explicit visibility
+are saved independently of layout profiles in YAML and TOML. Existing configs
+inherit their layout's visibility. Selecting a named layout applies that layout's
+arrangement, and saving one captures the current inspector state.
+
+The full race/static suite and ten Python checks passed. Model tests cover
+repeated toggles, focused-inspector hiding, preserved columns/sort/selection and
+custom sizing, picker cancellation, both config formats and restart, saved
+layouts, validation, command history, and clearing revealed Secret values on
+hide. Responsive checks cover bottom fallback at 80x24, right fallback at 140x20,
+returning to the preferred position after resizing, and suppressing the inspector
+when neither position fits. The inspector feature terminal scenario passed at
+180x48 and 80x24, including chooser cancellation, saved values, repeated toggles,
+custom-layout retention, direct commands and the unchanged `b` relationship key.
+Existing operator terminal workflows passed. CI and `just smoke` include the new
+inspector scenario.
+
+## v0.5.0 release qualification
+
+The final release tree passed `just check` (Go race tests, vet and ten Python
+checks) and the complete `just smoke` suite. Terminal coverage includes the
+80x24 classic, 180x48 inspector and 80x40 bottom layouts with persisted-setting
+restarts, the operator workflow, and all eighteen feature scenarios. All Go
+sources are gofmt-clean and `git diff --check` passes. The development binary
+reports `0.5.0-dev`; tagged builds inject the release tag as their version.

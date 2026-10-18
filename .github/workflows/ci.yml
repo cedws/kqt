@@ -23,6 +23,9 @@ jobs:
       - run: python3 scripts/features-smoke.py --feature relations
       - run: python3 scripts/features-smoke.py --feature manifest
       - run: python3 scripts/features-smoke.py --feature actions
+      - run: python3 scripts/features-smoke.py --feature diagnostics
+      - run: python3 scripts/features-smoke.py --feature help
+      - run: python3 scripts/features-smoke.py --feature inspector
       - run: python3 scripts/features-smoke.py --feature watch
       - run: python3 scripts/features-smoke.py --feature access
       - run: python3 scripts/features-smoke.py --feature overview

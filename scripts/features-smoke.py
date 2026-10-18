@@ -353,6 +353,89 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
                 send(':deploy\r'); expect('live')
                 send(':scale 2\r'); expect('Confirm scale'); send('default/web\r'); expect('scale requested')
                 send(':pods\r'); expect('live'); send(':nodes\r'); expect('nodes [3]'); expect('live')
+        elif args.feature=='inspector':
+            for width,height in [(180,48),(80,24)]:
+                resize_events.append((len(raw),width,height))
+                fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',height,width,0,0))
+                os.killpg(process.pid,signal.SIGWINCH); pump(0.3)
+                send(':layout classic\r'); expect('classic')
+                send('i'); expect('Inspector shown'); expect('Inspector · YAML')
+                assert 'inspector_visible: true' in config.read_text()
+                send('i'); expect('Inspector hidden')
+                assert 'Inspector · YAML' not in screen(raw,width,height,resize_events)
+                assert 'inspector_visible: false' in config.read_text()
+                send('I'); expect('Inspector position'); send('\x1b')
+                assert 'inspector_visible: false' in config.read_text(), 'cancel changed visibility'
+                send('Ibottom\r'); expect('Inspector shown at bottom'); expect('Inspector · YAML')
+                assert 'inspector_position: bottom' in config.read_text()
+                send('i'); expect('Inspector hidden'); send('i'); expect('Inspector shown at bottom')
+                assert 'inspector_position: bottom' in config.read_text(), 'i cycled placement'
+                send(':inspector\r'); expect('Inspector position'); send('right\r'); expect('Inspector shown')
+                assert 'inspector_position: right' in config.read_text()
+                send(':columns name,status,age\r:write inspector-test\r'); expect('Saved layout inspector-test')
+                send('i'); expect('Inspector hidden'); send('i'); expect('Inspector shown')
+                # Verify the saved view still owns its columns after visibility changes.
+                assert 'columns:' in config.read_text() and 'layout: inspector-test' in config.read_text()
+                send('b'); expect('Relations'); send('\x1b')
+                send(':inspector off\r'); expect('Inspector hidden')
+            send(':inspector typo\r'); expect('Use :inspector')
+        elif args.feature=='help':
+            for width,height in [(40,12),(80,24),(120,32),(180,48)]:
+                resize_events.append((len(raw),width,height))
+                fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',height,width,0,0))
+                os.killpg(process.pid,signal.SIGWINCH); pump(0.4)
+                send('?'); expect('Help'); expect('Navigation')
+                if width>=80:
+                    current=expect('Preferences')
+                    header=next(line for line in current.splitlines() if 'Shortcuts' in line and 'Notes' in line)
+                    assert header.index('Shortcuts')<header.index('Notes'), 'notes are not on the right'
+                    send('\tG')
+                    if width==80:
+                        assert re.search(r'Notes.*100%',screen(raw,width,height,resize_events)), 'notes did not scroll independently'
+                    send('\tg'); expect('Navigation')
+                else:
+                    send('\t'); expect('Preferences'); send('\t'); expect('Navigation')
+                send('/rllts'); expect('/rllts'); expect('H / :rollouts')
+                send('\r'); expect('fuzzy search')
+                send('/\x15zzzzzzzzzzzz'); expect('No help matches')
+                send('\x1b'); expect('/rllts'); expect('H / :rollouts')
+                send('/\x15'); expect('Navigation')
+                send('\x1b[200~osc52\x1b[201~'); expect('OSC52'); expect('/osc52')
+                send('\x1b'); expect('/rllts')
+                send('\x1b'); expect('pods')
+                send(':help\r'); expect('Navigation')
+                assert '/rllts' not in screen(raw,width,height,resize_events), 'help retained its previous search'
+                send('\x1b')
+            send(':themes\r'); expect('Themes'); send('\x1b')
+        elif args.feature=='diagnostics':
+            assert not args.kubeconfig, 'diagnostic PTY workflow uses the demo backend'
+            send(':diagnose\r'); expect('Scheduling diagnostics'); expect('[5: Diagnostics]')
+            send('G'); expect('Node observations do not prove a Pod')
+            send('2'); expect('Labels ('); send('5'); expect('Scheduling diagnostics')
+            send('\x1b'); send(':svc\r'); expect('services [1]')
+            send(':diagnose\r'); expect('Service troubleshooting'); expect('Port mappings')
+            target=root/'network.txt'
+            send('o'); expect('Save to:'); send('\x15'+str(target)+'\r'); expect('saved to')
+            report=target.read_text()
+            assert 'ready published addresses' in report and 'web-7c9f6d8b5-0000' in report
+            assert '\x1b' not in report
+            send('\x1b'); send(':pods\r'); expect('pods [12]')
+            downloads=root/'diagnostic exports'
+            send(':download-dir "'+str(downloads)+'"\r'); expect('Download directory:')
+            send(':bundle\r'); expect('Save bundle to:'); expect('diagnostics.tar.gz')
+            send('\r'); expect('Diagnostic bundle saved to',timeout=20)
+            import tarfile
+            archives=list(downloads.glob('*.tar.gz')); assert len(archives)==1
+            assert archives[0].stat().st_mode & 0o777==0o600
+            with tarfile.open(archives[0]) as archive:
+                names=archive.getnames()
+                assert {'README.txt','resource.yaml','status.yaml','events.yaml','related.txt','diagnostics.txt'}<=set(names)
+                assert 'logs.txt' not in names
+            target=downloads/'with logs.tar.gz'
+            send(':bundle --logs "'+str(target)+'"\r'); expect('Diagnostic bundle saved to',timeout=20)
+            with tarfile.open(target) as archive: assert 'logs.txt' in archive.getnames()
+            send(':bundle\r'); expect('Save bundle to:'); send('\x1b'); expect('Bundle export cancelled')
+            send(':secrets\r'); expect('secrets [1]'); send(':bundle\r'); expect('Secret resources are excluded')
         elif args.feature=='actions':
             send(':deploy\r'); expect('deployments.apps [1]')
             send(':scale 3\r'); expect('Confirm scale')
@@ -367,11 +450,12 @@ with tempfile.TemporaryDirectory(prefix='kqt-features-') as temporary:
                 send(':'+action+'\r'); expect('Confirm '+action); send('default/nightly-report\r')
                 expect('Created Job' if action=='run' else action+' requested')
             send(':jobs\r'); expect('jobs.batch [1]')
-            send('D'); expect('Confirm delete')
-            # Read the exact generated Job name from its exported API manifest.
-            send('\x1b'); target=root/'job.json'; send(':export json "'+str(target)+'"\r'); expect('Manifest saved to')
-            name=json.loads(target.read_text())['metadata']['name']
-            send('D'); expect('Confirm delete'); send('default/'+name+'\r'); expect('Deletion requested'); expect('jobs.batch [0]')
+            send('D'); expect('Delete Job?'); expect('No'); expect('Yes')
+            current=screen(raw,width,height,resize_events)
+            top=next(i for i,line in enumerate(current.splitlines()) if 'Delete Job?' in line)
+            assert top==(height-12)//2, 'delete modal is not compact and centred'
+            send('\r'); expect('Deletion cancelled'); expect('jobs.batch [1]')
+            send('D'); expect('Delete Job?'); send('\x1b[C\r'); expect('Deletion requested'); expect('jobs.batch [0]')
         elif args.feature=='manifest':
             destination=root/'clean manifest.json'
             send(':export json clean "'+str(destination)+'"\r'); expect('Manifest saved to')

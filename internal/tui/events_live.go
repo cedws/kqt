@@ -205,6 +205,8 @@ func (m *model) renderEventPanel() {
 	var content string
 	if m.resourcePanelTab == resourceStatusTab {
 		content = m.renderResourceStatus(m.eventObject, events, eventError)
+	} else if m.resourcePanelTab == resourceDiagnosticsTab {
+		content = m.renderResourceReport()
 	} else {
 		content = m.renderResourceMetadata(m.eventObject, m.resourcePanelTab)
 	}
@@ -278,11 +280,15 @@ func (m *model) eventStatusResult(v eventStatusMsg) tea.Cmd {
 	if v.replaced {
 		return nil
 	}
-	return m.scheduleEventStatus()
+	return tea.Batch(m.scheduleEventStatus(), m.loadResourceReport())
 }
 
 func (m *model) eventsKey(k string) tea.Cmd {
 	if !m.eventGlobal {
+		count := resourcePanelTabCount - 1
+		if m.hasResourceDiagnostics() {
+			count++
+		}
 		tab := m.resourcePanelTab
 		switch k {
 		case "1", "S", "E":
@@ -293,10 +299,16 @@ func (m *model) eventsKey(k string) tea.Cmd {
 			tab = resourceAnnotationsTab
 		case "4":
 			tab = resourceFinalizersTab
+		case "5":
+			if m.hasResourceDiagnostics() {
+				tab = resourceDiagnosticsTab
+			} else {
+				tab = resourcePanelTabCount
+			}
 		case "tab":
-			tab = (tab + 1) % resourcePanelTabCount
+			tab = (tab + 1) % count
 		case "shift+tab":
-			tab = (tab + resourcePanelTabCount - 1) % resourcePanelTabCount
+			tab = (tab + count - 1) % count
 		default:
 			tab = resourcePanelTabCount
 		}
@@ -305,7 +317,7 @@ func (m *model) eventsKey(k string) tea.Cmd {
 			m.eventTail = false
 			m.panel.GotoTop()
 			m.renderEventPanel()
-			return nil
+			return m.loadResourceReport()
 		}
 	}
 	switch k {

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -59,6 +60,13 @@ func downloadPath(directory, path string) (string, error) {
 }
 
 func saveDownload(directory, path, content string) (string, error) {
+	return saveDownloadContext(context.Background(), directory, path, []byte(content))
+}
+
+func saveDownloadContext(ctx context.Context, directory, path string, content []byte) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return path, err
+	}
 	destination, err := downloadPath(directory, path)
 	if err != nil {
 		return path, err
@@ -70,7 +78,10 @@ func saveDownload(directory, path, content string) (string, error) {
 	if err != nil {
 		return destination, err
 	}
-	_, err = file.WriteString(content)
+	_, err = file.Write(content)
+	if err == nil {
+		err = ctx.Err()
+	}
 	if closeErr := file.Close(); err == nil {
 		err = closeErr
 	}

@@ -52,11 +52,12 @@ type dimensions struct {
 
 func (m *model) inspectorDimensions() dimensions {
 	body := m.height - 6
-	p := m.settings.Layouts[m.layout]
-	if p.Inspector == "right" && m.width >= 120 && body >= 8 {
+	p := m.inspectorProfile()
+	rightFits, bottomFits := m.width >= 120 && body >= 8, m.height >= 24
+	if p.Inspector == "right" && rightFits || p.Inspector == "bottom" && !bottomFits && rightFits {
 		return dimensions{m.width * p.InspectorPercent / 100, body, false}
 	}
-	if p.Inspector == "bottom" && m.height >= 24 {
+	if p.Inspector == "bottom" && bottomFits || p.Inspector == "right" && !rightFits && bottomFits {
 		return dimensions{m.width, max(7, body*p.InspectorPercent/100), true}
 	}
 	return dimensions{}
@@ -64,7 +65,7 @@ func (m *model) inspectorDimensions() dimensions {
 func (m *model) resize() {
 	m.input.SetWidth(max(1, m.width-8))
 	m.resizeHistorySearch()
-	if m.mode == "manifest-save" || m.showingLogs() && m.mode != "logs" || m.mode == "event-save" || m.mode == "debug-image" {
+	if m.mode == "bundle-save" || m.mode == "manifest-save" || m.showingLogs() && m.mode != "logs" || m.mode == "event-save" || m.mode == "debug-image" {
 		m.input.SetWidth(max(1, m.width-ansi.StringWidth(m.input.Prompt)-2))
 		m.input.SetCursor(m.input.Position()) // Reflow long paths immediately after a resize.
 	}
@@ -72,6 +73,10 @@ func (m *model) resize() {
 		m.input.SetWidth(max(1, min(90, m.width-4)-6))
 	}
 	panelWidth, panelHeight := m.width-6, m.height-6
+	if m.smallDeleteModal() {
+		b := m.modalBounds()
+		panelWidth, panelHeight = b.width-2, b.height-4
+	}
 	if m.showingLogs() || m.showingEventPanel() {
 		panelWidth, panelHeight = m.width-2, m.height-8
 	}
@@ -84,6 +89,12 @@ func (m *model) resize() {
 			panelHeight--
 		}
 	}
+	if m.showingHelp() {
+		panes := m.helpPanes()
+		panelWidth, panelHeight = panes.shortcuts.width, panes.shortcuts.height
+		m.helpNotes.SetWidth(panes.notes.width)
+		m.helpNotes.SetHeight(panes.notes.height)
+	}
 	m.panel.SetWidth(max(1, panelWidth))
 	m.panel.SetHeight(max(1, panelHeight))
 	d := m.inspectorDimensions()
@@ -91,6 +102,9 @@ func (m *model) resize() {
 	m.inspector.SetHeight(max(1, d.height-2))
 	if d.width == 0 {
 		m.inspectorFocused = false
+	}
+	if m.showingHelp() {
+		m.refreshHelp(false)
 	}
 }
 func (m *model) statusToken(phase string) string {
@@ -287,6 +301,9 @@ func (m *model) pickerView(width, height int) string {
 	}
 	lines = append(lines, "", m.theme.style("muted").Render(" Type to search · ")+m.shortcuts(" · ", hints...))
 	title := strings.Title(m.pickerKind)
+	if m.pickerKind == "inspector-position" {
+		title = "Inspector position"
+	}
 	if m.pickerKind == "debug-image-source" {
 		title = "Debug image · first use"
 	}
@@ -427,15 +444,16 @@ func (m *model) baseView() tea.View {
 				status += " · resynced; history may have gaps"
 			}
 		}
-		if m.mode == "command" || m.mode == "history-search" || m.mode == "filter" || m.showingLogs() && m.mode != "logs" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" || m.mode == "action-confirm" || m.mode == "debug-image" {
+		if m.mode == "help-search" || m.mode == "command" || m.mode == "history-search" || m.mode == "filter" || m.showingLogs() && m.mode != "logs" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "bundle-save" || m.mode == "manifest-save" || m.mode == "action-confirm" || m.mode == "debug-image" {
 			status = m.input.View()
 			token = "foreground"
 		}
 		lines = append(lines, m.theme.style(token).Render(fit(status, w)))
 		lines = append(lines, m.theme.style("muted").Render(fit(m.footerHelp(d), w)))
 		content = strings.Join(lines, "\n")
-		if m.mode == "picker" || m.mode == "details" || m.mode == "help" || m.mode == "edit-error" || m.mode == "operation-error" || m.mode == "forward-details" || m.mode == "relations-loading" || m.mode == "rollouts-loading" || m.mode == "rollout-details" || m.mode == "action-confirm" || m.mode == "action-running" || m.mode == "access" || m.mode == "access-loading" || m.mode == "overview" || m.showingDebug() {
-			mw, mh := w-4, h-4
+		if m.mode == "bundle-loading" || m.mode == "picker" || m.mode == "details" || m.showingHelp() || m.mode == "edit-error" || m.mode == "edit-review" || m.mode == "operation-error" || m.mode == "forward-details" || m.mode == "relations-loading" || m.mode == "rollouts-loading" || m.mode == "rollout-details" || m.mode == "action-confirm" || m.mode == "delete-confirm" || m.mode == "action-running" || m.mode == "access" || m.mode == "access-loading" || m.mode == "overview" || m.showingDebug() {
+			bounds := m.modalBounds()
+			mw, mh := bounds.width, bounds.height
 			modal := ""
 			if m.mode == "picker" {
 				mw = min(90, mw)
@@ -443,7 +461,14 @@ func (m *model) baseView() tea.View {
 				modal = m.pickerView(mw, mh)
 			} else {
 				hints := []shortcut{{"Esc", "close"}, {"hjkl", "scroll"}}
-				if m.mode == "debug-image" {
+				if m.showingHelp() {
+					hints = []shortcut{{"/", "search"}, {"Tab", "pane"}, {"Esc", "close"}}
+					if m.mode == "help-search" {
+						hints = []shortcut{{"Enter", "keep filter"}, {"Esc", "cancel"}, {"↑/↓", "scroll"}}
+					}
+				} else if m.mode == "edit-review" {
+					hints = []shortcut{{"Enter", "apply"}, {"Esc", "discard"}, {"hjkl", "scroll"}}
+				} else if m.mode == "debug-image" {
 					hints = []shortcut{{"Enter", "save and continue"}, {"Esc", "cancel"}}
 				} else if m.mode == "debug-confirm" {
 					hints = []shortcut{{"Enter", "start"}, {"c", "container"}, {"d", "details"}, {"Esc", "cancel"}}
@@ -452,10 +477,18 @@ func (m *model) baseView() tea.View {
 				} else if m.mode == "rollout-details" {
 					hints = []shortcut{{"d", "compare"}, {"y", "template"}, {"r", "rollback"}, {"Esc", "close"}, {"hjkl", "scroll"}}
 				}
-				modal = m.frame(m.panelTitle, m.panel.View(), mw, mh, true, hints...)
+				body := m.panel.View()
+				if m.showingHelp() {
+					body = m.helpView()
+				}
+				if m.mode == "delete-confirm" {
+					hints = []shortcut{{"←/→", "choose"}, {"Enter", "confirm"}, {"Esc", "cancel"}}
+					body += "\n\n" + m.deleteButtons()
+				}
+				modal = m.frame(m.panelTitle, body, mw, mh, true, hints...)
 			}
 			modal = lipgloss.NewStyle().Background(m.theme.color("surface")).Foreground(m.theme.color("foreground")).Render(modal)
-			content = lipgloss.NewCompositor(lipgloss.NewLayer(content), lipgloss.NewLayer(modal).X((w-mw)/2).Y((h-mh)/2).Z(1)).Render()
+			content = lipgloss.NewCompositor(lipgloss.NewLayer(content), lipgloss.NewLayer(modal).X(bounds.x).Y(bounds.y).Z(1)).Render()
 			// The compositor trims unstyled trailing spaces after colour resets.
 			// Keep every row aligned with the terminal and mouse coordinates.
 			rows := strings.Split(content, "\n")

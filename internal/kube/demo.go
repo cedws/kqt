@@ -113,6 +113,7 @@ func NewDemo() *Demo {
 	demoRelationships(d)
 	demoRollouts(d)
 	demoActions(d)
+	demoDiagnostics(d)
 	return d
 }
 func (d *Demo) Resources(context.Context) ([]Resource, error) {

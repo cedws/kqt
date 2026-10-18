@@ -13,7 +13,7 @@ type completionState struct {
 	index   int
 }
 
-var commandNames = []string{"debug", "alias", "unalias", "rollout", "rollouts", "rollback", "overview", "access", "can-i", "permissions", "actions", "api", "delete", "restart", "resume", "run", "scale", "suspend", "columns", "copy", "context", "contexts", "ctx", "download-dir", "edit", "events", "export", "forward", "forwards", "help", "inspector", "label", "labels", "layout", "layouts", "logs", "metadata", "metrics", "namespace", "ns", "q", "quit", "refresh", "related", "relations", "resources", "shell", "sort", "status", "theme", "themes", "write"}
+var commandNames = []string{"diagnose", "bundle", "debug", "alias", "unalias", "rollout", "rollouts", "rollback", "overview", "access", "can-i", "permissions", "actions", "api", "delete", "restart", "resume", "run", "scale", "suspend", "columns", "copy", "context", "contexts", "ctx", "download-dir", "edit", "events", "export", "forward", "forwards", "help", "inspector", "label", "labels", "layout", "layouts", "logs", "metadata", "metrics", "namespace", "ns", "q", "quit", "refresh", "related", "relations", "resources", "shell", "sort", "status", "theme", "themes", "write"}
 
 func (m *model) completeCommand(reverse bool) {
 	value := m.input.Value()
@@ -36,6 +36,8 @@ func (m *model) completeCommand(reverse bool) {
 			prefix := parts[0] + " "
 			var names []string
 			switch parts[0] {
+			case "bundle":
+				names = []string{"--logs"}
 			case "debug":
 				names = []string{"attach"}
 				for name := range m.settings.Config.Debug.Profiles {
@@ -88,7 +90,7 @@ func (m *model) completeCommand(reverse bool) {
 			case "copy", "export":
 				names = []string{"yaml", "json", "clean", "yaml clean", "json clean"}
 			case "inspector":
-				names = []string{"yaml", "json", "right", "bottom", "none"}
+				names = []string{"yaml", "json", "position", "right", "bottom", "on", "off", "toggle", "none"}
 			case "sort":
 				columns := append(m.columns(), "name", "age", "status", "restarts")
 				for _, column := range columns {

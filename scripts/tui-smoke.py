@@ -221,7 +221,7 @@ sys.exit(code)
             send(b':sort name asc\r')
             assert b'\x1b[?1002h' in raw, 'mouse reporting was not enabled'
             if args.kubeconfig:
-                send(b'/kqt-log-fixture\r'); expect('pods [1]'); send(b'e'); expect('Updated Pod'); send(b'y'); expect('YAML'); expect('kqt-log-fixture'); expect('kqt.dev/editor-tested'); snapshot('yaml')
+                send(b'/kqt-log-fixture\r'); expect('pods [1]'); send(b'e'); expect('Review changes'); send(b'\r'); expect('Updated Pod'); send(b'y'); expect('YAML'); expect('kqt-log-fixture'); expect('kqt.dev/editor-tested'); snapshot('yaml')
                 send(b'\x1b'); pump(0.4)
                 send(b'L'); expect('Logs'); expect('kqt-live-log-marker'); snapshot('logs')
                 send(b'\x1b'); pump(0.4)
@@ -267,7 +267,7 @@ sys.exit(code)
                     send(b'\x1b'); pump(0.4)
             send(b':the\t'); expect(':theme'); send(b'\t'); expect(':themes'); send(b'\x1b'); pump(0.4)
             if not args.kubeconfig:
-                send(b'g'); send(b'e'); expect('Updated Pod'); send(b'y'); expect('kqt.dev/editor-tested'); send(b'\x1b'); pump(0.4)
+                send(b'g'); send(b'e'); expect('Review changes'); send(b'\r'); expect('Updated Pod'); send(b'y'); expect('kqt.dev/editor-tested'); send(b'\x1b'); pump(0.4)
             send(b'J'); expect('JSON'); expect('"apiVersion"'); snapshot('json'); send(b'y'); expect('YAML'); send(b'\x1b'); pump(0.4)
             send(b'tnord'); expect('nord'); send(b'\r'); expect('· nord')
             for help_command in [b'?', b':help\r']:

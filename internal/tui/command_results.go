@@ -67,7 +67,7 @@ func (m *model) executeSubmittedCommand(value string) tea.Cmd {
 	if local {
 		// Only the explicit success notices below are positive local results.
 		success := m.notice == "" || m.mode == "help"
-		for _, prefix := range []string{"Saved layout ", "Download directory:", "Context alias saved:", "Context alias removed:", "Stopping"} {
+		for _, prefix := range []string{"Saved layout ", "Download directory:", "Context alias saved:", "Context alias removed:", "Stopping", "Inspector shown", "Inspector hidden", "Inspector enabled"} {
 			success = success || strings.HasPrefix(m.notice, prefix)
 		}
 		if cmd != nil && word == "copy" {
@@ -78,10 +78,16 @@ func (m *model) executeSubmittedCommand(value string) tea.Cmd {
 		}
 		return cmd
 	}
+	if m.mode == "delete-confirm" && word == "delete" {
+		m.addHistoryExecution(value, "action", "", m.actionToken)
+		return cmd
+	}
 	if cmd == nil {
 		return nil
 	}
 	switch m.mode {
+	case "bundle-save", "bundle-loading":
+		m.addHistoryExecution(value, "bundle", "", m.bundleToken)
 	case "command": // An incomplete command has opened its argument prompt.
 		return cmd
 	case "picker":
@@ -95,7 +101,7 @@ func (m *model) executeSubmittedCommand(value string) tea.Cmd {
 		default:
 			m.rememberCommandAt(value, sequence)
 		}
-	case "action-confirm":
+	case "action-confirm", "delete-confirm":
 		m.addHistoryExecution(value, "action", "", m.actionToken)
 	case "debug-loading":
 		m.addHistoryExecution(value, "debug", "", m.debugToken)
@@ -139,6 +145,9 @@ func (m *model) historyExecutionFor(msg tea.Msg) *historyExecution {
 	var key historyOperation
 	valid := false
 	switch v := msg.(type) {
+	case bundleSavedMsg:
+		key = historyOperation{"bundle", v.generation, v.token}
+		valid = v.generation == m.generation && v.token == m.bundleToken && m.mode == "bundle-loading"
 	case debugPreparedMsg:
 		key = historyOperation{"debug", v.generation, v.token}
 		valid = v.generation == m.generation && v.token == m.debugToken && m.mode == "debug-loading"
@@ -193,6 +202,9 @@ func (m *model) historyExecutionFor(msg tea.Msg) *historyExecution {
 	case editorClosedMsg:
 		key = historyOperation{"edit", v.generation, v.token}
 		valid = v.generation == m.generation && v.token == m.editToken && m.mode == "editing"
+	case editReviewedMsg:
+		key = historyOperation{"edit", v.generation, v.token}
+		valid = v.generation == m.generation && v.token == m.editToken && m.mode == "edit-loading"
 	case editedMsg:
 		key = historyOperation{"edit", v.generation, v.token}
 		valid = v.generation == m.generation && v.token == m.editToken && m.mode == "edit-loading"
@@ -212,6 +224,8 @@ func (m *model) observeCommandResult(run *historyExecution, msg tea.Msg) {
 	}
 	complete, success := true, false
 	switch v := msg.(type) {
+	case bundleSavedMsg:
+		success = v.err == nil
 	case debugPreparedMsg:
 		complete = v.err != nil
 	case debugStartedMsg:
@@ -271,6 +285,8 @@ func (m *model) observeCommandResult(run *historyExecution, msg tea.Msg) {
 		complete = v.err != nil || m.mode != "editing"
 	case editorClosedMsg:
 		complete = v.err != nil || m.mode != "edit-loading"
+	case editReviewedMsg:
+		complete, success = v.err != nil || v.review == nil, v.err == nil && v.review == nil
 	case editedMsg:
 		success = v.err == nil
 	case shellClosedMsg:

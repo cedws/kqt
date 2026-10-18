@@ -67,6 +67,7 @@ func (m *model) loadEvents() tea.Cmd {
 	}
 }
 func (m *model) closeEvents() {
+	m.closeResourceReport()
 	m.eventToken++
 	if m.eventCancel != nil {
 		m.eventCancel()

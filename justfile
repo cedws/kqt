@@ -21,6 +21,9 @@ smoke: build
     python3 scripts/features-smoke.py --feature relations
     python3 scripts/features-smoke.py --feature manifest
     python3 scripts/features-smoke.py --feature actions
+    python3 scripts/features-smoke.py --feature diagnostics
+    python3 scripts/features-smoke.py --feature help
+    python3 scripts/features-smoke.py --feature inspector
     python3 scripts/features-smoke.py --feature watch
     python3 scripts/features-smoke.py --feature access
     python3 scripts/features-smoke.py --feature overview

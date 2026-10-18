@@ -18,6 +18,7 @@ const (
 	resourceLabelsTab
 	resourceAnnotationsTab
 	resourceFinalizersTab
+	resourceDiagnosticsTab
 	resourcePanelTabCount
 )
 
@@ -29,6 +30,8 @@ func (tab resourcePanelTab) title() string {
 		return "Annotations"
 	case resourceFinalizersTab:
 		return "Finalizers"
+	case resourceDiagnosticsTab:
+		return "Diagnostics"
 	default:
 		return "Status & Events"
 	}
@@ -38,8 +41,20 @@ func (tab resourcePanelTab) title() string {
 // scrolling through long annotations or following events.
 func (m *model) resourcePanelTabs() string {
 	names := []string{"Status", "Labels", "Annotations", "Finalizers"}
-	if m.panel.Width() < 64 {
-		names = []string{"Stat", "Labels", "Ann", "Fin"}
+	if m.hasResourceDiagnostics() {
+		names = append(names, "Diagnostics")
+	}
+	if m.panel.Width() < 74 {
+		names = []string{"Stat", "Lbl", "Ann", "Fin"}
+		if m.hasResourceDiagnostics() {
+			names = append(names, "Diag")
+		}
+	}
+	if m.panel.Width() < 50 {
+		names = []string{"S", "L", "A", "F"}
+		if m.hasResourceDiagnostics() {
+			names = append(names, "D")
+		}
 	}
 	var tabs []string
 	for i, name := range names {

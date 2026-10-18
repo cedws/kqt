@@ -50,6 +50,16 @@ per-context state, theme, inspector format, editor, columns, and named layouts.
 Explicit launch flags take precedence. Default TOML settings are migrated on
 first save while leaving their source unchanged; custom palettes remain TOML.
 
+Inspector visibility and placement have separate controls: `i` toggles visibility
+and `I` opens the right/bottom chooser. Optional `inspector_visible` and
+`inspector_position` preferences override the active profile without reapplying
+its columns, sorting, width percentage or wide state. Omitting visibility uses
+the profile's default, preserving existing configs. Selecting a layout clears
+the visibility override and applies its arrangement; saving a layout captures
+the effective inspector state. Hidden inspectors retain their preferred position.
+Rendering temporarily uses the other position when only that position fits,
+without saving the fallback. Hiding clears inspector focus and revealed Secrets.
+
 Built-in and inherited custom profiles choose inspector arrangement/percentage,
 per-resource columns/sort, and wide mode. `:layouts` selects a profile; `:write`
 saves the current configuration. Cycles, invalid names, and invalid fields fail
@@ -192,7 +202,10 @@ command, parsed with quote/escape support and no shell expansion.
 On successful editor exit, strictly parse one YAML document, preserving numeric
 precision. Resource identity and version cannot change; status and managedFields
 are excluded. Compare with the editable source and perform no write if unchanged.
-Otherwise send a minimal merge patch with original UID/resourceVersion
+Otherwise freeze a minimal merge patch and show a highlighted diff before any
+write. Enter applies that exact reviewed patch; Escape discards it and deletes
+the private file. Secret values remain redacted, with changed keys marked.
+Send the reviewed merge patch with original UID/resourceVersion
 preconditions. Kubernetes supplies schema validation and authorization. Keep the
 file on failure/conflict; delete it on success or an unchanged edit. Resume the
 resource table and its watch after return.
@@ -202,3 +215,26 @@ can change container state. Read-only mode blocks these paths locally. Resource
 relationships, generic watches, permission reviews, manifest exports and the
 cluster overview are implemented. Qualification uses backend contract tests,
 model tests, and PTY checks against demo and a disposable real Kubernetes cluster.
+
+## Read-only diagnostics and bundles
+
+The fifth resource-panel tab is available only for Pods and Services. Reports
+share structured sections between themed terminal rendering and plain-text bundle
+exports. Fresh GETs verify the selected UID; optional reads produce explicit
+unavailable sections. Reports use independent cancellation tokens under the
+status session, refresh at most once every five seconds, and cannot resurrect a
+closed view. Node observations are deliberately narrower than a scheduler
+simulation. Service readiness counts refer to deduplicated published addresses,
+with terminating/serving conditions shown separately.
+
+`:bundle [--logs] [PATH]` collects bounded snapshots under a cancellable deadline.
+A filtering backend prevents Secret GET/LIST calls while collecting relationships;
+only relationship identities/reasons are exported. Known secret-bearing manifest
+fields are redacted before serialization. Optional logs remain explicitly opt-in
+and are not claimed to be redacted. The selected UID is checked again at the end.
+The archive has fixed, flat entry names and private entry modes; saving uses the
+existing exclusive-create download path logic and removes partial writes.
+
+Deletion uses a compact centred No/Yes dialog with No selected initially.
+Keyboard, rendering and mouse hit testing share the same modal bounds. Existing
+UID/specification and deletion version preconditions still gate the operation.

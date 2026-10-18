@@ -27,7 +27,14 @@ func (m *model) inspectorBounds() paneBounds {
 }
 
 func (m *model) mouseClick(v tea.MouseClickMsg) {
-	if m.width < 40 || m.height < 12 || m.mode != "" || v.Button != tea.MouseLeft || v.Mod != 0 {
+	if m.width < 40 || m.height < 12 || v.Button != tea.MouseLeft || v.Mod != 0 {
+		return
+	}
+	if m.showingHelp() {
+		m.helpClick(v)
+		return
+	}
+	if m.mode != "" {
 		return
 	}
 	table := m.tableBounds()
@@ -85,6 +92,14 @@ func (m *model) mouseWheel(v tea.MouseWheelMsg) {
 	if key == "left" || key == "right" {
 		steps = 1
 	}
+	if m.showingHelp() {
+		if _, pane, ok := m.helpPaneAt(v.X, v.Y); ok {
+			for range steps {
+				scroll(pane, key)
+			}
+		}
+		return
+	}
 	if m.showingLogs() || m.showingEventPanel() {
 		bounds := paneBounds{0, 4, m.width, m.height - 6}
 		if m.showingLogs() && m.logFullScreen {
@@ -104,8 +119,8 @@ func (m *model) mouseWheel(v tea.MouseWheelMsg) {
 	}
 	if m.mode != "" {
 		switch m.mode {
-		case "details", "help", "forward-details", "edit-error", "operation-error", "overview", "access", "rollout-details", "debug-image", "debug-confirm", "debug-loading", "debug-starting":
-			if !(paneBounds{2, 2, m.width - 4, m.height - 4}).interior(v.X, v.Y) {
+		case "details", "help", "help-search", "forward-details", "edit-error", "edit-review", "delete-confirm", "operation-error", "overview", "access", "rollout-details", "debug-image", "debug-confirm", "debug-loading", "debug-starting":
+			if !m.modalBounds().interior(v.X, v.Y) {
 				return
 			}
 			for range steps {

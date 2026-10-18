@@ -76,6 +76,14 @@ unchanged. Saved views and namespaces stay attached to the real context name.
 
 Shortcut bars and the `?` / `:help` view highlight keys in the active theme's
 accent colour, with muted descriptions: `j/k: move`, `Tab: inspector`, `Esc: close`.
+Help shows shortcuts on the left and scrollable notes on the right. `Tab` switches
+keyboard focus between them; the mouse wheel scrolls the pane under the pointer.
+Below 80 columns, `Tab` switches which pane is shown.
+
+In help, press `/` for live fuzzy search across shortcuts, descriptions, sections
+and notes. Enter keeps the filtered results for scrolling; Escape cancels the
+search and restores the previous view. Clear the query to show all help, or press
+Escape outside search to close it. Reopening help starts with the full view.
 
 | Key | Action |
 | --- | --- |
@@ -107,6 +115,8 @@ accent colour, with muted descriptions: `j/k: move`, `Tab: inspector`, `Esc: clo
 | Mouse drag | Select visible text; release to copy, with a brief “Copied” flash |
 | `S` (also `E`), `:status`, `:events selected` | Readable status, conditions, containers, and live events |
 | `M`, `:metadata` | Resource labels, annotations and finalizers in the same panel |
+| `5` in Pod/Service status, `:diagnose` | Scheduling diagnostics or Service backend troubleshooting |
+| `:bundle [--logs] [PATH]` | Save a private diagnostic archive; logs are opt-in |
 | `m`, `:metrics on` / `off` | Toggle pod/node CPU and memory columns |
 | `s`, `:shell` | Open a shell in a running pod/container |
 | `B`, `:debug [PROFILE]` | Preview, confirm and attach an ephemeral debug container |
@@ -118,12 +128,23 @@ accent colour, with muted descriptions: `j/k: move`, `Tab: inspector`, `Esc: clo
 | `t`, `:themes` | Fuzzy theme picker with reversible previews |
 | `:layouts`, `:layout NAME` | Choose a saved layout |
 | `:write NAME` | Save current arrangement, columns, sort, and wide state |
-| `i`, `w` | Cycle inspector positions, wide fields |
+| `i` | Toggle the inspector off/on, remembering its position |
+| `I` (Shift+i), `:inspector` | Choose inspector position: right or bottom |
+| `w` | Toggle wide fields |
 | `O` | Sort by the next visible column, ascending; wraps to the first |
 | `Shift+Left/Right` or `[` / `]` | Sort by the previous / next visible column |
 | `R` | Reverse current sort direction |
 | `:sort`, `:sort COLUMN asc` / `desc` | Choose a column or set its order explicitly |
 | `Ctrl+R`, `Escape`, `?`, `q` | Refresh, back/close, help, quit |
+
+`i` only changes inspector visibility. `I` opens a placement chooser; choosing a
+position also shows the inspector. Both settings are saved, and toggling keeps
+the active layout's columns, sorting and pane size. `:inspector on`, `off`, and
+`toggle` control visibility; `:inspector right` or `bottom` places it directly
+(`none` remains an alias for `off`). On smaller terminals the inspector temporarily
+uses the other position if it fits, returning to your chosen position after a
+resize. Selecting a saved layout applies that layout's visibility and position;
+`:write NAME` captures the current inspector arrangement.
 
 Completion covers commands, resource names and aliases, theme/layout names,
 contexts, known namespaces, and inspector/sort options. Tab only fills the
@@ -378,7 +399,9 @@ Commands may contain quoted arguments, for example `code --wait` or `nvim -f`.
 They run directly, without a shell. Use an editor's wait/foreground option so it
 exits only after you finish editing.
 
-Saving changes and exiting successfully applies a minimal JSON merge patch with
+Saving changes and exiting successfully opens a highlighted diff. Press **Enter**
+to apply the reviewed changes or **Escape** to discard them. Secret values remain
+hidden in the diff; changed keys are marked. Applying sends a minimal JSON merge patch with
 UID and resourceVersion preconditions. Exiting without changes performs no
 write. Identity fields cannot change; status and managedFields are omitted and
 cannot be edited. Kubernetes enforces schema validation and update permissions.
@@ -572,14 +595,52 @@ DaemonSets support `:restart`. CronJobs support `:suspend`, `:resume`, and `:run
 (create one Job immediately from the job template). `D` / `:delete` requests
 normal Kubernetes deletion of the selected resource.
 
-Every action shows the context, resource and intended change, then requires its
-exact `namespace/name` (or name for a cluster-scoped resource) to confirm.
-Escape cancels. The resource UID and desired specification are checked before applying; patches
+Deletion shows a compact, centred **No / Yes** dialog with the context and resource.
+**No** is selected initially. Choose with arrows or Tab and press Enter, click a
+button, or press `y` / `n`. Escape cancels. Other workload actions require the exact
+`namespace/name` (or name for a cluster-scoped resource) to confirm.
+The resource UID and desired specification are checked before applying; patches
 and deletions carry identity/version preconditions. Background status updates
 are accepted, while changed specifications require a fresh selection. Permissions are enforced by Kubernetes. A successful request
 is reported separately from controller reconciliation; `S` shows rollout status
 and events. Cancelling a request already in progress does not roll back changes;
 refresh to check its final state.
+
+## Resource diagnostics and bundles
+
+On a **Service** or **Pod**, press `S` then `5`, or run `:diagnose`. `Tab` and
+`Shift+Tab` cycle the status panel's five tabs. Diagnostics refresh while open;
+`Ctrl+R` reloads immediately. Other resource kinds keep the four existing tabs.
+
+Service diagnostics show selectors, matching Pods, published EndpointSlice
+addresses and readiness, and Service-to-container port mappings. They flag empty
+selectors/backends, missing named ports, port mismatches and stale target UIDs.
+Selectorless Services and ExternalName Services are explained separately. This
+view reads API objects; it does not probe DNS, NetworkPolicies or connectivity.
+
+Pod scheduling diagnostics show the PodScheduled condition, retained scheduler
+events, tolerations, node selectors, affinity/topology constraints, per-container
+requests, node taints/readiness/allocatable resources, and PVC dependencies.
+Node observations do not replace the scheduler's decision: available capacity
+after other Pods, affinity matching, volume topology and custom scheduler plugins
+are not fully evaluated. Missing permissions appear as unavailable data rather
+than a healthy result. Node access is optional.
+
+`:bundle` prompts for a `.tar.gz` destination in the configured download directory.
+You can also provide a path: `:bundle "incident/api.tar.gz"`. The archive contains
+`resource.yaml`, `status.yaml`, available events, related resource summaries,
+Pod/Service diagnostics when applicable, and capture notes in `README.txt`.
+`:bundle --logs` explicitly adds log snapshots (at most 20 Pods, 200 lines per
+container and 4 MiB total). Both commands work in read-only mode.
+
+Secret resources are excluded, including when their inspector values are
+revealed. Literal environment values, ConfigMap data and last-applied annotations
+are redacted or omitted. Other annotations, command arguments, events, status and
+optional logs may contain sensitive application data; review the archive before
+sharing. Missing RBAC/API data is recorded in the archive's notes. Files and
+archive entries use private permissions, existing destinations are never
+overwritten, and Escape cancels capture. Captures reject a replaced selected
+resource and represent best-effort observations, not an atomic cluster snapshot.
 
 ## Deployment rollout history
 

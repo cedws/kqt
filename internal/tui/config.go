@@ -34,26 +34,28 @@ type layoutProfile struct {
 	Views            map[string]viewConfig `toml:"views,omitempty" yaml:"views,omitempty"`
 }
 type config struct {
-	Version         int                      `toml:"version" yaml:"version"`
-	Theme           string                   `toml:"theme" yaml:"theme"`
-	Layout          string                   `toml:"layout" yaml:"layout"`
-	View            string                   `toml:"view,omitempty" yaml:"view,omitempty"`
-	Namespace       string                   `toml:"namespace,omitempty" yaml:"namespace,omitempty"`
-	AllNamespaces   bool                     `toml:"all_namespaces,omitempty" yaml:"all_namespaces,omitempty"`
-	LastContext     string                   `toml:"last_context,omitempty" yaml:"last_context,omitempty"`
-	InspectorFormat string                   `toml:"inspector_format,omitempty" yaml:"inspector_format,omitempty"`
-	Refresh         string                   `toml:"refresh_interval" yaml:"refresh_interval"`
-	Editor          string                   `toml:"editor,omitempty" yaml:"editor,omitempty"`
-	Shell           string                   `toml:"shell,omitempty" yaml:"shell,omitempty"`
-	DownloadDir     string                   `toml:"download_dir,omitempty" yaml:"download_dir,omitempty"`
-	Logs            logPreferences           `toml:"logs" yaml:"logs"`
-	Debug           debugConfig              `toml:"debug,omitempty" yaml:"debug,omitempty"`
-	CommandHistory  []string                 `toml:"command_history,omitempty" yaml:"command_history,omitempty"`
-	ReadOnly        bool                     `toml:"read_only,omitempty" yaml:"read_only,omitempty"`
-	Views           map[string]viewConfig    `toml:"views,omitempty" yaml:"views,omitempty"`
-	Layouts         map[string]layoutProfile `toml:"layouts,omitempty" yaml:"layouts,omitempty"`
-	Contexts        map[string]contextState  `toml:"contexts,omitempty" yaml:"contexts,omitempty"`
-	ContextAliases  map[string]string        `toml:"context_aliases,omitempty" yaml:"context_aliases,omitempty"`
+	Version           int                      `toml:"version" yaml:"version"`
+	Theme             string                   `toml:"theme" yaml:"theme"`
+	Layout            string                   `toml:"layout" yaml:"layout"`
+	View              string                   `toml:"view,omitempty" yaml:"view,omitempty"`
+	Namespace         string                   `toml:"namespace,omitempty" yaml:"namespace,omitempty"`
+	AllNamespaces     bool                     `toml:"all_namespaces,omitempty" yaml:"all_namespaces,omitempty"`
+	LastContext       string                   `toml:"last_context,omitempty" yaml:"last_context,omitempty"`
+	InspectorFormat   string                   `toml:"inspector_format,omitempty" yaml:"inspector_format,omitempty"`
+	InspectorPosition string                   `toml:"inspector_position,omitempty" yaml:"inspector_position,omitempty"`
+	InspectorVisible  *bool                    `toml:"inspector_visible,omitempty" yaml:"inspector_visible,omitempty"`
+	Refresh           string                   `toml:"refresh_interval" yaml:"refresh_interval"`
+	Editor            string                   `toml:"editor,omitempty" yaml:"editor,omitempty"`
+	Shell             string                   `toml:"shell,omitempty" yaml:"shell,omitempty"`
+	DownloadDir       string                   `toml:"download_dir,omitempty" yaml:"download_dir,omitempty"`
+	Logs              logPreferences           `toml:"logs" yaml:"logs"`
+	Debug             debugConfig              `toml:"debug,omitempty" yaml:"debug,omitempty"`
+	CommandHistory    []string                 `toml:"command_history,omitempty" yaml:"command_history,omitempty"`
+	ReadOnly          bool                     `toml:"read_only,omitempty" yaml:"read_only,omitempty"`
+	Views             map[string]viewConfig    `toml:"views,omitempty" yaml:"views,omitempty"`
+	Layouts           map[string]layoutProfile `toml:"layouts,omitempty" yaml:"layouts,omitempty"`
+	Contexts          map[string]contextState  `toml:"contexts,omitempty" yaml:"contexts,omitempty"`
+	ContextAliases    map[string]string        `toml:"context_aliases,omitempty" yaml:"context_aliases,omitempty"`
 }
 type Settings struct {
 	Path     string
@@ -165,6 +167,9 @@ func LoadSettings(path string) (*Settings, error) {
 	}
 	if c.InspectorFormat != "yaml" && c.InspectorFormat != "json" {
 		return nil, fmt.Errorf("inspector_format must be yaml or json")
+	}
+	if err := validateInspectorPreferences(c); err != nil {
+		return nil, err
 	}
 	if c.Shell != "" {
 		if _, err := editorArgs(c.Shell); err != nil {
@@ -305,6 +310,8 @@ view: pods
 namespace: default
 all_namespaces: false
 inspector_format: yaml
+# inspector_position: right # right or bottom; I opens the placement chooser
+# inspector_visible: true # i toggles; omitted uses the selected layout's default
 refresh_interval: 2s
 # read_only: true # disables resource changes and shells
 # editor: "code --wait" # default: $EDITOR, then $VISUAL, then vi

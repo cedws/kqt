@@ -37,12 +37,16 @@ event = {'apiVersion': 'v1', 'kind': 'Event', 'metadata': {'name': 'kqt-fixture-
 (root / 'event.json').write_text(json.dumps(event))
 PY
 kubectl --kubeconfig "$test_root/config" apply -f "$test_root/event.json"
+if [ "${1:-}" = "--diagnostics-only" ]; then
+    KQT_LIVE_KUBECONFIG="$test_root/config" go test -race ./internal/kube -run '^TestLiveDiagnostics$' -v -count=1 -timeout=2m
+    exit
+fi
 KQT_LIVE_KUBECONFIG="$test_root/config" go test -race ./internal/kube -run '^TestLiveOperator$' -v -count=1 -timeout=4m
 python3 scripts/tui-smoke.py --kubeconfig "$test_root/config" "$@"
 python3 scripts/operator-smoke.py --kubeconfig "$test_root/config"
 # Run mutation qualification last so short-lived terminating pods cannot affect
 # the baseline operator/overview fixture counts.
 python3 scripts/features-smoke.py --feature watch --kubeconfig "$test_root/config"
-for feature in TestLiveResources TestLiveAccess TestLiveOverview TestLiveActions TestLiveDebug; do
+for feature in TestLiveResources TestLiveAccess TestLiveOverview TestLiveActions TestLiveDiagnostics TestLiveDebug; do
     KQT_LIVE_KUBECONFIG="$test_root/config" go test -race ./internal/kube -run "^${feature}$" -v -count=1 -timeout=2m
 done

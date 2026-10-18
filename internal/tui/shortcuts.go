@@ -22,20 +22,34 @@ func (m *model) shortcuts(separator string, hints ...shortcut) string {
 }
 
 func (m *model) footerHelp(d dimensions) string {
+	if m.mode == "help-search" {
+		return " " + m.shortcuts("  ", shortcut{"Tab", "pane"}, shortcut{"↑/↓", "scroll"}, shortcut{"Enter", "keep filter"}, shortcut{"Esc", "cancel search"})
+	}
+	if m.mode == "help" {
+		return " " + m.shortcuts("  ", shortcut{"/", "fuzzy search"}, shortcut{"Tab", "pane"}, shortcut{"j/k", "scroll"}, shortcut{"Esc", "close"})
+	}
 	if m.showingLogs() && m.logFilterError != "" {
 		return m.theme.style("error").Render(" "+m.logFilterError) + " · " + m.shortcuts("", shortcut{"Esc", "cancel"})
 	}
-	hints := []shortcut{{"j/k", "move"}, {"[ / ]", "sort column"}, {"O", "next sort"}, {"R", "reverse"}, {"S", "status"}, {":", "command"}, {"?", "help"}, {"q", "quit"}}
+	inspectorAction := "show/place"
+	if m.inspectorVisible() {
+		inspectorAction = "hide/place"
+	}
+	hints := []shortcut{{"j/k", "move"}, {"[ / ]", "sort column"}, {"i/I", inspectorAction}, {"O", "next sort"}, {"R", "reverse"}, {"S", "status"}, {":", "command"}, {"?", "help"}, {"q", "quit"}}
 	if d.width > 0 {
-		hints = []shortcut{{"j/k", "move"}, {"Tab", "inspector"}, {"O", "next sort"}, {"R", "reverse"}, {"S", "status"}, {":", "command"}, {"?", "help"}}
+		hints = []shortcut{{"j/k", "move"}, {"Tab", "inspector"}, {"i/I", inspectorAction}, {"O", "next sort"}, {"R", "reverse"}, {"S", "status"}, {":", "command"}, {"?", "help"}}
 	}
 	if m.inspectorFocused {
-		hints = []shortcut{{"j/k", "scroll"}, {"Ctrl+U/D", "page"}, {"g/G", "ends"}, {"Tab/Esc", "list"}, {"?", "help"}, {"q", "quit"}}
+		hints = []shortcut{{"j/k", "scroll"}, {"Ctrl+U/D", "page"}, {"g/G", "ends"}, {"i/I", inspectorAction}, {"Tab/Esc", "list"}, {"?", "help"}, {"q", "quit"}}
 	}
 	if m.mode == "command" {
 		hints = []shortcut{{"↑/↓", "history"}, {"Ctrl+R", "search"}, {"Tab/Shift+Tab", "complete"}, {"Enter", "run"}, {"Esc", "cancel"}}
 	} else if m.mode == "history-search" {
 		return m.historySearchPreview()
+	} else if m.mode == "bundle-save" {
+		return " " + m.shortcuts("  ", shortcut{"Enter", "save"}, shortcut{"Esc", "cancel"})
+	} else if m.mode == "bundle-loading" {
+		return " " + m.shortcuts("  ", shortcut{"Esc", "cancel export"})
 	} else if m.mode == "debug-image" {
 		return " " + m.shortcuts("  ", shortcut{"Enter", "save and continue"}, shortcut{"Esc", "cancel"})
 	} else if m.mode == "debug-confirm" {
@@ -44,6 +58,10 @@ func (m *model) footerHelp(d dimensions) string {
 		return " " + m.shortcuts("  ", shortcut{"Esc", "cancel waiting"})
 	} else if m.mode == "action-confirm" {
 		return m.theme.style("muted").Render(" Type the resource name shown  ") + m.shortcuts("  ", shortcut{"Enter", "confirm"}, shortcut{"Esc", "cancel"})
+	} else if m.mode == "delete-confirm" {
+		return " " + m.shortcuts("  ", shortcut{"←/→ Tab", "No / Yes"}, shortcut{"Enter", "confirm"}, shortcut{"Esc", "cancel"})
+	} else if m.mode == "edit-review" {
+		return " " + m.shortcuts("  ", shortcut{"Enter", "apply"}, shortcut{"Esc", "discard"}, shortcut{"hjkl", "scroll"})
 	} else if m.mode == "" && len(m.resourceForwards()) > 0 {
 		hints = []shortcut{{"x", "stop forwards for resource"}, {"F", "manage forwards"}, {":", "command"}, {"?", "help"}, {"q", "quit"}}
 	}
@@ -66,9 +84,9 @@ func (m *model) footerHelp(d dimensions) string {
 		}
 	}
 	if m.showingEventPanel() {
-		hints = []shortcut{{"1–4", "tabs"}, {"Tab", "cycle"}, {"Space", "pause"}, {"/", "filter"}, {"o", "save"}, {"G", "follow"}, {"Ctrl+R", "reload"}, {"Esc", "close"}}
+		hints = []shortcut{{m.resourceTabKeys(), "tabs"}, {"Tab", "cycle"}, {"Space", "pause"}, {"/", "filter"}, {"o", "save"}, {"G", "follow"}, {"Ctrl+R", "reload"}, {"Esc", "close"}}
 		if m.resourcePanelTab != resourceStatusTab {
-			hints = []shortcut{{"1–4", "tabs"}, {"Tab/Shift+Tab", "cycle"}, {"j/k", "scroll"}, {"o", "save"}, {"Ctrl+R", "reload"}, {"Esc", "close"}}
+			hints = []shortcut{{m.resourceTabKeys(), "tabs"}, {"Tab/Shift+Tab", "cycle"}, {"j/k", "scroll"}, {"o", "save"}, {"Ctrl+R", "reload"}, {"Esc", "close"}}
 		}
 	} else if m.eventGlobal && m.mode == "" && !m.inspectorFocused {
 		hints = []shortcut{{"Space", "pause"}, {"/", "filter"}, {"o", "save"}, {"G", "follow"}, {"0", "all namespaces"}, {":", "command"}, {"q", "quit"}}

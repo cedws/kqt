@@ -357,6 +357,9 @@ func TestDragCopyInReadableModalsAndResourceTabs(t *testing.T) {
 		if mode == "events" {
 			point = textPoint{1, 6} // Below the pinned resource tabs.
 		}
+		if mode == "help" {
+			point = textPoint{3, 4} // Below the help pane headings.
+		}
 		row := strings.Split(ansi.Strip(m.View().Content), "\n")[point.y]
 		if !strings.HasPrefix(ansi.Cut(row, point.x, m.width), "INFO visible panel") {
 			t.Fatalf("%s selection coordinates do not match the rendered panel", mode)

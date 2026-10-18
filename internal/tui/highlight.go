@@ -82,8 +82,8 @@ func (m *model) setTheme(t theme) {
 	if m.showingEventPanel() && !m.eventPaused {
 		m.renderEventPanel()
 	}
-	if m.mode == "help" && m.panelTitle == "Help" {
-		m.panel.SetContent(m.renderHelp())
+	if m.showingHelp() {
+		m.refreshHelp(false)
 	}
 }
 

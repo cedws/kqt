@@ -88,6 +88,7 @@ type logsMsg struct {
 }
 
 type model struct {
+	deleteYes                                bool
 	debug                                    *debugState
 	debugToken                               uint64
 	debugCancel                              context.CancelFunc
@@ -157,8 +158,14 @@ type model struct {
 	editToken                                uint64
 	editCancel                               context.CancelFunc
 	editBuffer                               *editBuffer
+	editReview                               *editReview
 	width, height                            int
 	mode, panelTitle                         string
+	helpQuery, helpPreviousQuery             string
+	helpPreviousOffset                       int
+	helpNotes                                viewport.Model
+	helpNotesFocused, helpPreviousNotesFocus bool
+	helpPreviousNotesOffset                  int
 	input                                    textinput.Model
 	choices, matches                         []choice
 	pickerIndex                              int
@@ -194,6 +201,16 @@ type model struct {
 	metricsWarning                           string
 	eventObject                              unstructured.Unstructured
 	resourcePanelTab                         resourcePanelTab
+	resourceReport                           kube.DiagnosticReport
+	reportError                              string
+	reportLoading                            bool
+	reportCancel                             context.CancelFunc
+	reportToken                              uint64
+	reportUpdated                            time.Time
+	bundleTarget                             unstructured.Unstructured
+	bundleOptions                            kube.BundleOptions
+	bundleToken                              uint64
+	bundleCancel                             context.CancelFunc
 	eventToken                               uint64
 	eventCancel                              context.CancelFunc
 	eventContext                             context.Context
@@ -222,6 +239,7 @@ func newModel(ctx context.Context, s *Settings, o Options, l *kube.Loader) (*mod
 	m.themeUntil, m.themeTimer = time.Now().Add(10*time.Second), 1
 	m.panel = viewport.New(viewport.WithWidth(74), viewport.WithHeight(16))
 	m.panel.SoftWrap = false
+	m.helpNotes = viewport.New()
 	m.inspector = viewport.New()
 	m.inspector.SoftWrap = true
 	m.input = textinput.New()
@@ -290,6 +308,7 @@ func (m *model) Init() tea.Cmd {
 	return tea.Batch(m.connect(m.contextName), m.themeTimeout())
 }
 func (m *model) close() {
+	m.cancelBundle()
 	m.commandExecutions = nil
 	m.cancelRollouts()
 	m.cancelOverview()
@@ -440,6 +459,7 @@ func (m *model) poll() tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg { return pollMsg{g, id} })
 }
 func (m *model) navigate(r route, remember bool) tea.Cmd {
+	m.cancelBundle()
 	m.cancelDebug()
 	m.cancelRollouts()
 	m.cancelOverview()
@@ -818,6 +838,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case eventsMsg:
 		if v.generation == m.generation && v.token == m.eventToken && m.showingEventPanel() {
 			if v.err != nil {
+				m.reportError = kube.Safe(v.err.Error())
+				m.eventStatusError = kube.Safe(v.err.Error())
 				m.panel.SetContent("Unable to read resource: " + kube.Safe(v.err.Error()) + "\n\nCtrl+R retries; Esc closes.")
 			} else {
 				m.eventObject = v.object
@@ -829,7 +851,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.eventError = kube.Safe(v.eventsError.Error())
 				}
 				m.renderEventPanel()
-				return m, m.startEventWatch()
+				return m, tea.Batch(m.startEventWatch(), m.loadResourceReport())
 			}
 		}
 	case eventPulseMsg:
@@ -838,6 +860,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.eventStatusTick(v)
 	case eventStatusMsg:
 		return m, m.eventStatusResult(v)
+	case bundleSavedMsg:
+		return m, m.bundleSaved(v)
+	case resourceReportMsg:
+		return m, m.resourceReportReady(v)
 	case eventSavedMsg:
 		if v.generation != m.generation || v.token != m.eventToken {
 			return m, nil
@@ -869,11 +895,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.editorReady(v)
 	case editorClosedMsg:
 		return m, m.editorClosed(v)
+	case editReviewedMsg:
+		return m, m.editReviewReady(v)
 	case editedMsg:
 		return m, m.editFinished(v)
 	case tea.KeyPressMsg:
 		return m, m.key(v)
 	case tea.MouseClickMsg:
+		if m.mode == "delete-confirm" {
+			return m, m.deleteMouse(v)
+		}
 		m.cancelSelection()
 		m.mouseClick(v)
 		m.beginSelection(v)
@@ -889,7 +920,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.copyFlash = ""
 		}
 	default:
-		if m.mode == "command" || m.mode == "history-search" || m.mode == "filter" || m.mode == "picker" || m.showingLogs() && m.mode != "logs" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "manifest-save" || m.mode == "action-confirm" || m.mode == "debug-image" {
+		if m.mode == "help-search" {
+			return m, m.updateHelpSearch(msg)
+		}
+		if m.mode == "command" || m.mode == "history-search" || m.mode == "filter" || m.mode == "picker" || m.showingLogs() && m.mode != "logs" || m.mode == "event-search" || m.mode == "event-save" || m.mode == "bundle-save" || m.mode == "manifest-save" || m.mode == "action-confirm" || m.mode == "debug-image" {
 			var cmd tea.Cmd
 			m.input, cmd = m.input.Update(msg)
 			return m, cmd

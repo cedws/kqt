@@ -68,6 +68,30 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 	if m.mode == "history-search" {
 		return m.historySearchKey(msg)
 	}
+	if m.mode == "help-search" {
+		return m.helpSearchKey(msg)
+	}
+	if m.mode == "help" {
+		if k == "/" {
+			return m.startHelpSearch()
+		}
+		if k == "tab" || k == "shift+tab" {
+			m.helpNotesFocused = !m.helpNotesFocused
+			return nil
+		}
+		if scroll(m.helpActivePane(), k) {
+			return nil
+		}
+	}
+	if m.mode == "bundle-save" || m.mode == "bundle-loading" {
+		return m.bundleKey(msg)
+	}
+	if m.mode == "delete-confirm" {
+		return m.deleteKey(msg)
+	}
+	if m.mode == "edit-review" {
+		return m.editReviewKey(msg)
+	}
 	if m.showingDebug() {
 		return m.debugKey(msg)
 	}
@@ -465,24 +489,16 @@ func (m *model) key(msg tea.KeyPressMsg) tea.Cmd {
 	case "O":
 		m.cycleOrder(1)
 	case "i":
-		switch m.settings.Layouts[m.layout].Inspector {
-		case "none":
-			m.selectLayout("inspector")
-		case "right":
-			m.selectLayout("bottom")
-		default:
-			m.selectLayout("classic")
-		}
+		m.toggleInspector()
+	case "I":
+		return m.openPicker("inspector-position")
 	case "ctrl+r":
 		if m.backend == nil {
 			return m.connect(m.contextName)
 		}
 		return m.refreshResources()
 	case "?":
-		m.mode = "help"
-		m.panelTitle = "Help"
-		m.panel.SetContent(m.renderHelp())
-		m.panel.GotoTop()
+		return m.openHelp()
 	}
 	return nil
 }
@@ -708,16 +724,22 @@ func (m *model) command(value string) tea.Cmd {
 		m.saveLayout(arg)
 	case "inspector":
 		switch arg {
+		case "", "position":
+			return m.openPicker("inspector-position")
 		case "json", "yaml":
 			m.setInspectorFormat(arg)
 		case "right":
-			m.selectLayout("inspector")
+			m.placeInspector("right")
 		case "bottom":
-			m.selectLayout("bottom")
-		case "none":
-			m.selectLayout("classic")
+			m.placeInspector("bottom")
+		case "none", "off":
+			m.setInspectorVisibility(false)
+		case "on":
+			m.setInspectorVisibility(true)
+		case "toggle":
+			m.toggleInspector()
 		default:
-			m.notice = "Use :inspector json, yaml, right, bottom, or none"
+			m.notice = "Use :inspector [position|right|bottom|on|off|toggle|json|yaml]"
 		}
 	case "sort":
 		return m.sortCommand(arg)
@@ -760,6 +782,18 @@ func (m *model) command(value string) tea.Cmd {
 		return m.changeResource("events", true)
 	case "status":
 		return m.openEvents()
+	case "bundle":
+		return m.bundleCommand(arg)
+	case "diagnose":
+		if arg != "" {
+			m.notice = "Use :diagnose on a Pod or Service"
+			return nil
+		}
+		if o, ok := m.current(); !ok || (o.GetKind() != "Pod" && o.GetKind() != "Service") {
+			m.notice = "Select a Pod or Service for diagnostics"
+			return nil
+		}
+		return m.openResourcePanel(resourceDiagnosticsTab)
 	case "metadata":
 		tab := resourceLabelsTab
 		switch arg {
@@ -804,10 +838,7 @@ func (m *model) command(value string) tea.Cmd {
 		}
 		return m.refreshResources()
 	case "help":
-		m.mode = "help"
-		m.panelTitle = "Help"
-		m.panel.SetContent(m.renderHelp())
-		m.panel.GotoTop()
+		return m.openHelp()
 	default:
 		if arg != "" {
 			m.notice = "Resource commands do not take arguments; use :ns or :labels to set scope"
@@ -828,6 +859,11 @@ func (m *model) openPicker(kind string) tea.Cmd {
 	m.choices = nil
 	m.pickerIndex = 0
 	switch kind {
+	case "inspector-position":
+		m.choices = []choice{{"right", "beside the resource list"}, {"bottom", "below the resource list"}}
+		if m.inspectorPlacement() == "bottom" {
+			m.pickerIndex = 1
+		}
 	case "debug-image-source", "debug-profiles", "debug-targets", "debug-attach":
 		m.choices = m.debugChoices(kind)
 	case "log-options":
@@ -1031,6 +1067,8 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 			return m.selectTheme(m.settings.Themes[c.name])
 		case "layouts":
 			m.selectLayout(c.name)
+		case "inspector-position":
+			m.placeInspector(c.name)
 		case "contexts":
 			name, err := m.resolveContext(c.name)
 			if err != nil {
@@ -1108,6 +1146,8 @@ Explore
   S / :status        Status, conditions, containers, and live events (E also works)
   M / :metadata      Labels, annotations and finalizers in the status panel
   Resource panel     1 status, 2 labels, 3 annotations, 4 finalizers; Tab cycles
+  5 / :diagnose      Pod scheduling or Service backends, ports and selectors
+  :bundle [--logs] [PATH]  Export diagnostics; logs opt-in, Secrets excluded
   :events            Live namespace event table (0 = all namespaces)
   Events             Space pause, / filter, G follow latest, o save
   m / :metrics       Toggle pod/node CPU and memory columns
@@ -1127,6 +1167,8 @@ Explore
   Log filters        Terms combine; ! excludes; empty input clears the filter
   Drag text          Select and copy readable text; bottom-right confirmation
   e / :edit          Edit fresh resource in configured editor or $EDITOR
+  Edit review        Highlighted diff; Enter applies, Escape discards
+  D / :delete        Compact Yes/No confirmation; No selected initially
 
 Appearance and saved settings
   :download-dir PATH  Default directory for all file exports; clear resets it
@@ -1134,8 +1176,9 @@ Appearance and saved settings
   :layouts           Search and apply saved layout profiles
   :layout NAME       Apply layout directly
   :write NAME        Save current arrangement and columns as a layout
-  i                  Cycle right / bottom / classic inspector layouts
-  :inspector json    Also accepts yaml, right, bottom, none
+  i                  Toggle inspector off/on; remember its position
+  I / :inspector     Choose inspector position: right or bottom
+  :inspector json    Also yaml, right, bottom, on, off, toggle (none = off)
   w                  Wide fields
   :sort              Column picker; :sort COLUMN asc|desc sets an order
   :columns name,status,age   Configure columns for the active layout
@@ -1144,24 +1187,38 @@ Appearance and saved settings
 
 Refresh and exit
   Ctrl+R / :refresh  Refresh resources or retry connection
-  ? / :help          This help
+  ? / :help          This help; / fuzzy searches shortcuts, descriptions and notes
   q / :q / Ctrl+C    Quit
+`
 
+const helpNotesText = `Preferences
 View and namespace are saved per context in ~/.config/kqt/config.yaml.
 Themes, layouts and inspector format are saved when applied.
 The theme name is shown for ten seconds after selection.
+
+Security
 Kubeconfig is never modified. Secret values are hidden by default; x reveals
 decoded values for the selected Secret. x, closing details, selection/context
 changes, and editing hide them again. The reveal state is never saved.
-Editing reads a fresh full object, applies a versioned patch on saved changes,
-and retains the private file on errors/conflicts. Unchanged edits do not write.
+
+Editing
+Editing reads a fresh full object and shows a diff before applying a versioned
+patch. Errors/conflicts retain the private file. Unchanged edits do not write.
+
+Logs
 Live logs: Space pauses, / searches, o saves, F switches live/snapshot.
 w wraps, s follows latest lines, f fills the terminal; Esc leaves focus first.
-Drag copies visible text using the terminal's OSC52 clipboard support.
 Snapshots: last 500 lines / 1 MiB per source; aggregate at most 4 MiB.
 Live logs retain 4 MiB / 10,000 lines and follow at most 64 containers.
+
+Clipboard
+Drag copies visible text using the terminal's OSC52 clipboard support.
+
+Metrics
 Metrics require the cluster Metrics API. cpu%/memory% compare pod limits
 or node allocatable capacity; missing limits/samples display a dash.
-Tables refresh every 2s. Forwarding binds 127.0.0.1 and ends on context
+
+Refresh and forwarding
+Tables refresh every 2s by default. Forwarding binds 127.0.0.1 and ends on context
 switch or quit. :forward stop ID / all stops a forward without opening it.
 `

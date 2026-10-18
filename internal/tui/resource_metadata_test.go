@@ -117,6 +117,7 @@ func TestLastAppliedAnnotationPreservesJSONAndSource(t *testing.T) {
 
 func TestResourcePanelTabsKeepWatchAndSelectionAndDoNotFollowHiddenEvents(t *testing.T) {
 	m, session := eventModel(t, false)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 32})
 	feed, token, selected := m.eventFeed, m.eventToken, m.selected
 	m.eventObject.SetLabels(map[string]string{"app": "web"})
 	m.eventObject.SetAnnotations(map[string]string{"notes": "first\nsecond"})
@@ -124,7 +125,7 @@ func TestResourcePanelTabsKeepWatchAndSelectionAndDoNotFollowHiddenEvents(t *tes
 	for _, tc := range []struct {
 		key string
 		tab resourcePanelTab
-	}{{"2", resourceLabelsTab}, {"tab", resourceAnnotationsTab}, {"tab", resourceFinalizersTab}, {"tab", resourceStatusTab}, {"shift+tab", resourceFinalizersTab}, {"1", resourceStatusTab}, {"3", resourceAnnotationsTab}, {"4", resourceFinalizersTab}, {"M", resourceLabelsTab}, {"S", resourceStatusTab}, {"E", resourceStatusTab}} {
+	}{{"2", resourceLabelsTab}, {"tab", resourceAnnotationsTab}, {"tab", resourceFinalizersTab}, {"tab", resourceDiagnosticsTab}, {"tab", resourceStatusTab}, {"shift+tab", resourceDiagnosticsTab}, {"1", resourceStatusTab}, {"3", resourceAnnotationsTab}, {"4", resourceFinalizersTab}, {"M", resourceLabelsTab}, {"S", resourceStatusTab}, {"E", resourceStatusTab}} {
 		if tc.key == "shift+tab" {
 			m.key(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 		} else {
@@ -212,7 +213,14 @@ func TestMetadataEntryCommandsFreshReadsAndDimensions(t *testing.T) {
 		key(m, "3")
 		key(m, "G")
 		view := m.View().Content
-		if len(strings.Split(view, "\n")) != size[1] || !strings.Contains(ansi.Strip(view), "[2: Labels]") {
+		label := "Labels"
+		if size[0] < 76 {
+			label = "Lbl"
+		}
+		if size[0] < 52 {
+			label = "L"
+		}
+		if len(strings.Split(view, "\n")) != size[1] || !strings.Contains(ansi.Strip(view), "[2: "+label+"]") || !strings.Contains(ansi.Strip(view), "[5:") {
 			t.Fatal("metadata or pinned tabs exceeded the terminal height")
 		}
 		for _, line := range strings.Split(view, "\n") {

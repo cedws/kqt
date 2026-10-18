@@ -46,7 +46,9 @@ func (m *model) selectionPane(x, y int) (paneBounds, *viewport.Model, bool) {
 		bounds, panel = m.logTextBounds(), &m.panel
 	case "events":
 		bounds, panel = paneBounds{1, 6, m.panel.Width(), m.panel.Height()}, &m.panel
-	case "details", "help", "access", "overview", "forward-details", "edit-error", "operation-error", "rollout-details":
+	case "help", "help-search":
+		return m.helpPaneAt(x, y)
+	case "details", "access", "overview", "forward-details", "edit-error", "edit-review", "operation-error", "rollout-details":
 		bounds, panel = paneBounds{3, 3, m.width - 6, m.height - 6}, &m.panel
 	case "":
 		b := m.inspectorBounds()

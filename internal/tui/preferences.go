@@ -98,6 +98,9 @@ func (s *Settings) savePatch(patch map[string]any) error {
 	if err = validateLogPreferences(check.Logs); err != nil {
 		return err
 	}
+	if err = validateInspectorPreferences(check); err != nil {
+		return err
+	}
 	if err = validateDebugConfig(check.Debug); err != nil {
 		return err
 	}
@@ -212,9 +215,24 @@ func (m *model) applyLayout(name string) bool {
 	return true
 }
 func (m *model) selectLayout(name string) {
+	profile, ok := m.settings.Layouts[name]
+	if !ok {
+		m.applyLayout(name)
+		return
+	}
+	position := ""
+	if profile.Inspector == "none" {
+		position = m.inspectorPlacement()
+	}
+	m.settings.Config.InspectorVisible = nil
+	m.settings.Config.InspectorPosition = position
 	if m.applyLayout(name) {
 		m.settings.Config.Layout = name
-		m.savePreferences(map[string]any{"layout": name})
+		patch := map[string]any{"layout": name, "inspector_visible": nil, "inspector_position": nil}
+		if position != "" {
+			patch["inspector_position"] = position
+		}
+		m.savePreferences(patch)
 	}
 }
 func (m *model) saveLayout(name string) {
@@ -227,6 +245,7 @@ func (m *model) saveLayout(name string) {
 		return
 	}
 	p := m.settings.Layouts[m.layout]
+	p.Inspector = m.inspectorProfile().Inspector
 	p.Views = cloneViews(m.views)
 	v, ok := p.Views[m.route.resource.ID()]
 	if !ok {
