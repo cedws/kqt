@@ -1,0 +1,87 @@
+name: Publish Homebrew formula
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+    secrets:
+      HOMEBREW_TAP_SSH_KEY:
+        required: true
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing stable release to publish to the tap
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homebrew-kqt
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'z0mbix/kqt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Validate published stable release
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/release_version.py "$RELEASE_TAG"
+          gh release view "$RELEASE_TAG" --json isDraft,isPrerelease,tagName > release.json
+          python3 - <<'PY'
+          import json
+          import os
+          from scripts.release_version import release_version
+
+          tag, prerelease = release_version(os.environ["RELEASE_TAG"])
+          release = json.load(open("release.json"))
+          if prerelease or release["isDraft"] or release["isPrerelease"] or release["tagName"] != tag:
+              raise SystemExit("Homebrew requires a published stable release")
+          PY
+          latest=$(gh release view --json tagName --jq .tagName)
+          if [[ "$RELEASE_TAG" != "$latest" ]]; then
+            echo "Refusing to replace the tap with a release other than the latest stable release: $latest" >&2
+            exit 1
+          fi
+      - name: Download published macOS archives and checksums
+        run: |
+          gh release download "$RELEASE_TAG" --dir release \
+            --pattern 'kqt-darwin-*.tar.gz' --pattern SHA256SUMS
+      - name: Check out the tap with its dedicated deploy key
+        uses: actions/checkout@v7
+        with:
+          repository: z0mbix/homebrew-tap
+          ref: main
+          path: homebrew-tap
+          ssh-key: ${{ secrets.HOMEBREW_TAP_SSH_KEY }}
+      - name: Verify archives and generate formula
+        run: python3 scripts/homebrew_formula.py "$RELEASE_TAG" release homebrew-tap/Formula/kqt.rb
+      - name: Commit and publish formula
+        shell: bash
+        working-directory: homebrew-tap
+        run: |
+          set -euo pipefail
+          git add Formula/kqt.rb
+          if git diff --cached --quiet; then
+            echo "The tap already contains kqt $RELEASE_TAG"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "kqt $RELEASE_TAG"
+          git pull --rebase origin main
+          git push origin HEAD:main

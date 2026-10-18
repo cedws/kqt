@@ -10,6 +10,18 @@ kubectl is not required at runtime.
 
 ![kqt resource explorer with highlighted YAML](docs/screenshots/explorer.png)
 
+## Install on macOS
+
+Install the latest stable release on Apple Silicon or Intel Macs with Homebrew:
+
+```sh
+brew install z0mbix/tap/kqt
+```
+
+Update with `brew update && brew upgrade kqt`. The
+[tap](https://github.com/z0mbix/homebrew-tap) installs the prebuilt release binary;
+Go and kubectl are not required.
+
 ## Run
 
 Requires Go 1.27.2 or later; mise pins Go 1.27.2 for this repository.
@@ -56,6 +68,18 @@ chosen archive with `shasum -a 256 -c kqt-darwin-arm64.tar.gz.sha256` (adjust th
 platform as needed).
 Tag builds report the tag as their version; other builds report `dev-<commit>`.
 All six targets are cross-compiled on Linux with CGO disabled.
+
+After a stable release is published, the workflow verifies the published macOS
+archives against `SHA256SUMS` and updates `Formula/kqt.rb` in
+`z0mbix/homebrew-tap`. Prereleases leave the tap on the stable version. The
+**Publish Homebrew formula** workflow can also be dispatched with an existing
+latest stable tag to retry publishing without rebuilding or creating a release.
+
+Publishing uses the `HOMEBREW_TAP_SSH_KEY` Actions secret in this repository,
+paired with a write-enabled deploy key on the tap. To rotate it, generate a new
+dedicated SSH key, register its public key on the tap, replace this secret with
+the private key, then remove the old deploy key. Each additional software
+repository should use its own deploy key and secret for this shared tap.
 
 ## Kubernetes connection
 

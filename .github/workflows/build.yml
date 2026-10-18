@@ -136,3 +136,13 @@ jobs:
             --verify-tag --title "kqt $RELEASE_TAG" --generate-notes \
             --notes 'macOS, Linux, and FreeBSD binaries are available for amd64 and arm64. Each archive includes kqt, the README, screenshots, and theme license notices. Verify downloads using SHA256SUMS or the individual .sha256 files.' \
             "${flags[@]}"
+
+  homebrew:
+    name: Publish Homebrew formula
+    needs: [version, release]
+    if: github.event_name == 'push' && github.ref_type == 'tag' && needs.version.outputs.prerelease == 'false'
+    uses: ./.github/workflows/homebrew.yml
+    with:
+      release_tag: ${{ needs.version.outputs.version }}
+    secrets:
+      HOMEBREW_TAP_SSH_KEY: ${{ secrets.HOMEBREW_TAP_SSH_KEY }}
