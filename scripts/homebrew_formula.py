@@ -30,7 +30,6 @@ def homebrew_formula(tag, directory):
 class Kqt < Formula
   desc "Keyboard-first Kubernetes browser with live resource tables and logs"
   homepage "https://github.com/z0mbix/kqt"
-  version "{tag[1:]}"
 
   depends_on :macos
 
@@ -53,7 +52,7 @@ class Kqt < Formula
   end
 
   test do
-    assert_equal "kqt version v#{{version}}", shell_output("#{{bin}}/kqt --version").strip
+    assert_equal "kqt version {tag}", shell_output("#{{bin}}/kqt --version").strip
     assert_match "Kubernetes", shell_output("#{{bin}}/kqt --help")
   end
 end

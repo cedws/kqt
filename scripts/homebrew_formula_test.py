@@ -22,13 +22,18 @@ class HomebrewFormulaTest(unittest.TestCase):
 
     def test_both_architectures_use_verified_archives(self):
         formula = homebrew_formula("v1.2.3", self.directory)
-        self.assertIn('version "1.2.3"', formula)
+        self.assertIn('assert_equal "kqt version v1.2.3"', formula)
         for arch in ("arm64", "amd64"):
             content = (self.directory / f"kqt-darwin-{arch}.tar.gz").read_bytes()
             self.assertIn(f"/v1.2.3/kqt-darwin-{arch}.tar.gz", formula)
             self.assertIn(f'sha256 "{hashlib.sha256(content).hexdigest()}"', formula)
         self.assertIn('bin.install "kqt"', formula)
         self.assertIn('internal/tui/licenses/*.txt', formula)
+
+    def test_build_metadata_is_preserved_in_urls_and_binary_version_check(self):
+        formula = homebrew_formula("v1.2.3+build.5", self.directory)
+        self.assertIn("/v1.2.3+build.5/kqt-darwin-arm64.tar.gz", formula)
+        self.assertIn('assert_equal "kqt version v1.2.3+build.5"', formula)
 
     def test_invalid_and_prerelease_tags_are_rejected(self):
         for tag in ("v1.2.3-rc.1", "v1.02.3", 'v1.2.3"; system("bad")'):
